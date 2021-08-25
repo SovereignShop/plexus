@@ -1,9 +1,6 @@
 {:paths ["src/main" "resources"]
- :deps  {org.clojure/clojure   {:mvn/version "1.10.3"}
-         scad-tarmi/scad-tarmi {:mvn/version "0.6.0"}
-         metosin/malli         {:mvn/version "0.5.1"}
-         scad-app/scad-app     {:mvn/version "1.0.0"}
-         scad-clj/scad-clj     {:mvn/version "0.5.3"}}
+ :deps  {clj-tf/clj-tf     {:local/root "../clj-tf"}
+         scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
  {:run-m   {:main-opts ["-m" "scad-paths.core"]}
   :run-x   {:ns-default scad-paths.main
