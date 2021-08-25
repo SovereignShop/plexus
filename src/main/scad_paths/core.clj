@@ -28,12 +28,8 @@
                     (m/rotatec [0 0 (- angle)])
                     (m/translate [x y 0])))
         new-angle (- angle (/ u/pi 2))]
-    [[(+ x
-         (* curve-radius (Math/sin angle))
-         (* curve-radius (Math/sin new-angle)))
-      (+ y
-         (* curve-radius (Math/cos angle))
-         (* curve-radius (Math/cos new-angle)))
+    [[(+ x (* curve-radius (- (- (Math/cos angle) (Math/cos new-angle)))))
+      (+ y (* curve-radius (- (- (Math/sin new-angle) (Math/sin angle)))))
       new-angle]
      (conj segments part)]))
 
@@ -48,12 +44,33 @@
                     (m/rotatec [0 0 (- angle)])
                     (m/translate [x y 0])))
         new-angle (+ angle (/ u/pi 2))]
-    [[(+ x
-         (* curve-radius (Math/sin angle))
-         (* curve-radius (Math/sin new-angle)))
-      (+ y
-         (* curve-radius (Math/cos angle))
-         (* curve-radius (Math/cos new-angle)))
+    [[(+ x (* curve-radius (- (Math/cos angle) (Math/cos new-angle))))
+      (+ y (* curve-radius (- (Math/sin new-angle) (Math/sin angle))))
+      new-angle]
+     (conj segments part)]))
+
+(defmethod path-segment ::curve
+  [_ [x y angle] segments {:keys [curve-radius curve-angle fn shape]}]
+  (let [part (binding [m/*fn* fn]
+               (if (pos? curve-angle)
+                 (->> shape
+                      (m/translate [curve-radius 0 0])
+                      (m/extrude-rotate {:angle curve-angle})
+                      (m/translate [(- curve-radius) 0 0])
+                      (m/rotatec [0 u/pi 0])
+                      (m/rotatec [0 0 (- angle)])
+                      (m/translate [x y 0]))
+                 (->> shape
+                      (m/translate [curve-radius 0 0])
+                      (m/extrude-rotate {:angle (Math/abs curve-angle)})
+                      (m/translate [(- curve-radius) 0 0])
+                      (m/rotatec [0 0 (- angle)])
+                      (m/translate [x y 0]))))
+        new-angle (+ angle (* 0.01745329 curve-angle))]
+    [[(+ x (* curve-radius ((if (pos? curve-angle) + -)
+                            (- (Math/cos angle) (Math/cos new-angle)))))
+      (+ y (* curve-radius ((if (pos? curve-angle) + -)
+                            (- (Math/sin new-angle) (Math/sin angle)))))
       new-angle]
      (conj segments part)]))
 
@@ -83,6 +100,9 @@
 
 (defn right [& opts]
   `(::right ~@opts))
+
+(defn curve [& opts]
+  `(::curve ~@opts))
 
 (defn forward [& opts]
   `(::forward ~@opts))
