@@ -72,7 +72,6 @@
 
 (defmethod path-segment :extrude/hull
   [_ [x y angle] segments {:keys [fn mask-shape shape]}]
-
   (let [part (binding [m/*fn* fn]
                (->> shape
                     (m/extrude-linear {:height 0.1 :center false})
