@@ -18,7 +18,7 @@
               [new-pose parts] (path-segment op pose ret options)]
           (recur new-pose steps options parts))))))
 
-(defmethod path-segment :extrude/left
+(defmethod path-segment ::left
   [_ [x y angle] segments {:keys [curve-radius fn shape]}]
   (let [part (binding [m/*fn* fn]
                (->> shape
@@ -37,7 +37,7 @@
       new-angle]
      (conj segments part)]))
 
-(defmethod path-segment :extrude/right
+(defmethod path-segment ::right
   [_ [x y angle] segments {:keys [curve-radius fn shape]}]
   (let [part (binding [m/*fn* fn]
                (->> shape
@@ -57,7 +57,7 @@
       new-angle]
      (conj segments part)]))
 
-(defmethod path-segment :extrude/forward
+(defmethod path-segment ::forward
   [_ [x y angle] segments {:keys [fn length shape] :or {length 10}}]
   (let [part (binding [m/*fn* fn]
                (->> shape
@@ -70,34 +70,22 @@
       angle]
      (conj segments part)]))
 
-(defmethod path-segment :extrude/hull
-  [_ [x y angle] segments {:keys [fn mask-shape shape]}]
+(defmethod path-segment ::hull
+  [_ [x y angle] segments {:keys [fn]}]
   (let [part (binding [m/*fn* fn]
-               (->> shape
-                    (m/extrude-linear {:height 0.1 :center false})
-                    (m/rotatec [(- (u/half u/pi)) 0 0])
-                    (m/rotatec [0 0 (- angle)])
-                    (m/translate [x y 0])))
-        mask-part (when mask-shape
-                    (binding [m/*fn* fn]
-                      (->> mask-shape
-                           (m/extrude-linear {:height 0.1 :center false})
-                           (m/rotatec [(- (u/half u/pi)) 0 0])
-                           (m/rotatec [0 0 (- angle)])
-                           (m/translate [x y 0]))))]
+               (m/hull (-> segments pop peek)
+                       (peek segments)))]
     [[x y angle]
-     (conj (pop segments)
-           (cond-> (m/hull (peek segments) part)
-             mask-part (m/difference (m/hull (peek segments) mask-part))))]))
+     (conj (-> segments pop pop) part)]))
 
 (defn left [& opts]
-  `(:extrude/left ~@opts))
+  `(::left ~@opts))
 
 (defn right [& opts]
-  `(:extrude/right ~@opts))
+  `(::right ~@opts))
 
 (defn forward [& opts]
-  `(:extrude/forward ~@opts))
+  `(::forward ~@opts))
 
 (defn hull [& opts]
-  `(:extrude/hull ~@opts))
+  `(::hull ~@opts))
