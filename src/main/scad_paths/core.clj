@@ -19,7 +19,7 @@
           (recur new-pose steps options parts))))))
 
 (defmethod path-segment ::left
-  [_ [x y angle] segments {:keys [curve-radius fn shape]}]
+  [_ [x y angle] segments {:keys [curve-radius fn shape gap]}]
   (let [part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
@@ -31,10 +31,12 @@
     [[(+ x (* curve-radius (- (- (Math/cos angle) (Math/cos new-angle)))))
       (+ y (* curve-radius (- (- (Math/sin new-angle) (Math/sin angle)))))
       new-angle]
-     (conj segments part)]))
+     (if gap
+       segments
+       (conj segments part))]))
 
 (defmethod path-segment ::right
-  [_ [x y angle] segments {:keys [curve-radius fn shape]}]
+  [_ [x y angle] segments {:keys [curve-radius fn shape gap]}]
   (let [part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
@@ -47,10 +49,12 @@
     [[(+ x (* curve-radius (- (Math/cos angle) (Math/cos new-angle))))
       (+ y (* curve-radius (- (Math/sin new-angle) (Math/sin angle))))
       new-angle]
-     (conj segments part)]))
+     (if gap
+       segments
+       (conj segments part))]))
 
 (defmethod path-segment ::curve
-  [_ [x y angle] segments {:keys [curve-radius curve-angle fn shape]}]
+  [_ [x y angle] segments {:keys [curve-radius curve-angle fn shape gap]}]
   (let [part (binding [m/*fn* fn]
                (if (pos? curve-angle)
                  (->> shape
@@ -72,10 +76,12 @@
       (+ y (* curve-radius ((if (pos? curve-angle) + -)
                             (- (Math/sin new-angle) (Math/sin angle)))))
       new-angle]
-     (conj segments part)]))
+     (if gap
+       segments
+       (conj segments part))]))
 
 (defmethod path-segment ::forward
-  [_ [x y angle] segments {:keys [fn length shape] :or {length 10}}]
+  [_ [x y angle] segments {:keys [fn length shape gap] :or {length 10}}]
   (let [part (binding [m/*fn* fn]
                (->> shape
                     (m/extrude-linear {:height length :center false})
@@ -85,7 +91,9 @@
     [[(+ x (* length (Math/sin angle)))
       (+ y (* length (Math/cos angle)))
       angle]
-     (conj segments part)]))
+     (if gap
+       segments
+       (conj segments part))]))
 
 (defmethod path-segment ::hull
   [_ [x y angle] segments {:keys [fn]}]
