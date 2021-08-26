@@ -20,12 +20,14 @@
             (recur new-pose steps ctx parts)))))))
 
 (defn path-grid [columns ctx & path*]
-  (let [paths (apply map vector
-                     (map (fn [[l r :as pair]]
-                            (if (= :same r)
-                              [l l]
-                              pair))
-                          (partition columns path*)))]
+  (let [paths (for [section (partition-by #(= % :branch) path*)
+                    p (apply map vector
+                             (map (fn [[l r :as pair]]
+                                    (if (= :same r)
+                                      [l l]
+                                      pair))
+                                  (partition columns section)))]
+                p)]
     (mapv #(apply path ctx %) paths)))
 
 (defmethod path-segment ::left
@@ -130,6 +132,15 @@
                 (m/rotatec [0 0 (- angle)])
                 (m/translate [x y 0])))]))
 
+(defmethod path-segment ::branch-grid
+  [ctx [x y angle :as pose] segments args]
+  (let [model (apply path-grid 2 ctx args)]
+    [pose
+     (conj segments
+           (->> model
+                (m/rotatec [0 0 (- angle)])
+                (m/translate [x y 0])))]))
+
 (defn left [& opts]
   `(::left ~@opts))
 
@@ -147,6 +158,9 @@
 
 (defn branch [& args]
   `(::branch ~@args))
+
+(defn branch-grid [& args]
+  `(::branch-grid ~@args))
 
 (defn context [& args]
   `(::context ~@args))
