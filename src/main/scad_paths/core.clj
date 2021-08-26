@@ -15,9 +15,18 @@
       (if (nil? op)
         (m/union ret)
         (if (= op ::context)
-          (recur pose steps (into ctx (partition 2 args)) ret)
+          (recur pose steps (into ctx (partition-all 2) (vec args)) ret)
           (let [[new-pose parts] (path-segment (assoc ctx :op op) pose ret args)]
             (recur new-pose steps ctx parts)))))))
+
+(defn path-grid [columns ctx & path*]
+  (let [paths (apply map vector
+                     (map (fn [[l r :as pair]]
+                            (if (= :same r)
+                              [l l]
+                              pair))
+                          (partition columns path*)))]
+    (mapv #(apply path ctx %) paths)))
 
 (defmethod path-segment ::left
   [{:keys [fn shape gap] :as ctx} [x y angle] segments args]
