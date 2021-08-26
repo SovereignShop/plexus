@@ -26,31 +26,32 @@
    (let [default-context {:or 10 :curve-radius 7 :shell 1/2 :fn 100 :shape (u/circle-shell 3 2) :pose [0 0 0]}]
      (loop [{outer-pose :pose :as outer-context} (into default-context outer-context)
             {inner-pose :pose :as inner-context} (into default-context inner-context)
-            [[l r] & segments] (partition 2 path)
+            [seg & segments] path
             outer []
             inner []]
-       (cond (nil? l)
-             [outer inner]
+       (let [[l r] (if (vector? seg) seg [seg])]
+         (cond (nil? l)
+               [outer inner]
 
-             (= l :branch)
-             (let [[out in] (path-grid outer-context inner-context r)]
-               (recur outer-context inner-context segments (into outer out) (into inner in)))
+               (= l :branch)
+               (let [[out in] (path-grid outer-context inner-context r)]
+                 (recur outer-context inner-context segments (into outer out) (into inner in)))
 
-             (= (first l) ::context)
-             (recur (into outer-context (partition-all 2) (next l))
-                    (into inner-context (partition-all 2) (next r))
-                    segments outer inner)
+               (= (first l) ::context)
+               (recur (into outer-context (partition-all 2) (next l))
+                      (into inner-context (partition-all 2) (next r))
+                      segments outer inner)
 
-             :else
-             (let [[l-op & l-args :as left] l
-                   [r-op & r-args] (if (= r :same) left r)
-                   [outer-pose outer] (path-segment (assoc outer-context :op l-op) outer-pose outer l-args)
-                   [inner-pose inner] (path-segment (assoc inner-context :op r-op) inner-pose inner r-args)]
-               (recur (assoc outer-context :pose inner-pose)
-                      (assoc inner-context :pose outer-pose)
-                      segments
-                      outer
-                      inner)))))))
+               :else
+               (let [[l-op & l-args :as left] l
+                     [r-op & r-args] (if (nil? r) left r)
+                     [outer-pose outer] (path-segment (assoc outer-context :op l-op) outer-pose outer l-args)
+                     [inner-pose inner] (path-segment (assoc inner-context :op r-op) inner-pose inner r-args)]
+                 (recur (assoc outer-context :pose inner-pose)
+                        (assoc inner-context :pose outer-pose)
+                        segments
+                        outer
+                        inner))))))))
 
 (defmethod path-segment ::left
   [{:keys [fn shape gap] :as ctx} [x y angle] segments args]
