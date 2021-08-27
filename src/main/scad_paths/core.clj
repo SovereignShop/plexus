@@ -122,12 +122,12 @@
        (conj segments part))]))
 
 (defmethod path-segment ::forward
-  [{:keys [fn shape gap]} [x y angle] segments [& {:keys [length model]}]]
+  [{:keys [fn shape gap]} [x y angle] segments [& {:keys [length model twist]}]]
   (let [part (binding [m/*fn* fn]
                (->> (if model
                       model
                       (->> shape
-                           (m/extrude-linear {:height length :center false})))
+                           (m/extrude-linear {:height length :center false :twist twist})))
                     (m/rotatec [(- (u/half u/pi)) 0 0])
                     (m/rotatec [0 0 (- angle)])
                     (m/translate [x y 0])))]
