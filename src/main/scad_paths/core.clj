@@ -31,11 +31,11 @@
             inner []]
        (let [[l r] (if (vector? seg) seg [seg])]
          (cond (nil? l)
-               [outer inner]
+               [(m/union outer) (m/union inner)]
 
                (= l :branch)
                (let [[out in] (path-grid outer-context inner-context r)]
-                 (recur outer-context inner-context segments (into outer out) (into inner in)))
+                 (recur outer-context inner-context segments (conj outer out) (conj inner in)))
 
                (= (first l) ::context)
                (recur (into outer-context (partition-all 2) (next l))
