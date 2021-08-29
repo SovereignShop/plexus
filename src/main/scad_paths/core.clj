@@ -122,15 +122,18 @@
        (conj segments part))]))
 
 (defmethod path-segment ::forward
-  [{:keys [fn shape gap]} [x y angle] segments [& {:keys [length model twist]}]]
+  [{:keys [fn shape]} [x y angle] segments [& {:keys [length model twist gap mask]}]]
   (let [part (binding [m/*fn* fn]
-               (->> (if model
-                      model
-                      (->> shape
-                           (m/extrude-linear {:height length :center false :twist twist})))
-                    (m/rotatec [(- (u/half u/pi)) 0 0])
-                    (m/rotatec [0 0 (- angle)])
-                    (m/translate [x y 0])))]
+               (as-> (if model
+                       model
+                       (->> shape
+                            (m/extrude-linear {:height length :center false :twist twist}))) m
+                 (m/rotatec [(- (u/half u/pi)) 0 0] m)
+                 (if mask
+                   (m/difference m mask)
+                   m)
+                 (m/rotatec [0 0 (- angle)] m)
+                 (m/translate [x y 0] m)))]
     [[(+ x (* length (Math/sin angle)))
       (+ y (* length (Math/cos angle)))
       angle]
@@ -155,14 +158,12 @@
                 (m/rotatec [0 0 (- angle)])
                 (m/translate [x y 0])))]))
 
-(defmethod path-segment ::branch-grid
-  [ctx [x y angle :as pose] segments args]
-  (let [model (apply path-grid 2 ctx args)]
-    [pose
-     (conj segments
-           (->> model
-                (m/rotatec [0 0 (- angle)])
-                (m/translate [x y 0])))]))
+(defmethod path-segment ::translate
+  [_ [x y angle] segments {:keys [length]}]
+  [[(+ x (* length (Math/sin angle)))
+    (+ y (* length (Math/cos angle)))
+    angle]
+   segments])
 
 (defn left [& opts]
   `(::left ~@opts))
@@ -182,8 +183,8 @@
 (defn branch [& args]
   `(::branch ~@args))
 
-(defn branch-grid [& args]
-  `(::branch-grid ~@args))
-
 (defn context [& args]
   `(::context ~@args))
+
+(defn translate [& args]
+  `(::translate ~@args))
