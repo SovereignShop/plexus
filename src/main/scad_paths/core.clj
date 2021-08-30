@@ -23,35 +23,54 @@
   ([ctx path]
    (path-grid ctx ctx path))
   ([outer-context inner-context path]
-   (let [default-context {:or 10 :curve-radius 7 :shell 1/2 :fn 100 :shape (u/circle-shell 3 2) :pose [0 0 0]}]
-     (loop [{outer-pose :pose :as outer-context} (into default-context outer-context)
-            {inner-pose :pose :as inner-context} (into default-context inner-context)
-            [seg & segments] path
-            outer []
-            inner []]
-       (let [[l r] (if (vector? seg) seg [seg])]
+   (let [default-context {:or 10 :curve-radius 7 :shell 1/2 :fn 100 :shape (u/circle-shell 3 2) :pose [0 0 0]}
+         merge-fn (partial merge-with into)]
+     (loop [ret {:outer-context (into default-context outer-context)
+                 :inner-context (into default-context inner-context)
+                 :outer-form []
+                 :inner-form []}
+            [seg & segments] path]
+       (let [[l r] (if (vector? seg) seg [seg])
+             outer-context (:outer-context ret)
+             outer-pose (:pose outer-context)
+             inner-context (:inner-context ret)
+             inner-pose (:pose inner-context)]
          (cond (nil? l)
-               [(m/union outer) (m/union inner)]
+               ret
 
                (= l :branch)
-               (let [[out in] (path-grid outer-context inner-context r)]
-                 (recur outer-context inner-context segments (conj outer out) (conj inner in)))
+               (let [ret (merge-fn ret
+                                   (-> (path-grid outer-context inner-context r)
+                                       (dissoc :outer-context :inner-context)))]
+                 (recur ret segments))
+
+               (= l :model)
+               (let [k (first r)
+                     p (next r)
+                     r (path-grid outer-context inner-context p)]
+                 (recur (-> (merge-fn r ret)
+                            (assoc-in [:models k] r))
+                        segments))
 
                (= (first l) ::context)
-               (recur (into outer-context (partition-all 2) (next l))
-                      (into inner-context (partition-all 2) (next r))
-                      segments outer inner)
+               (recur (-> ret
+                          (update :outer-context into (partition-all 2) (next l))
+                          (update :inner-context into (partition-all 2) (next r)))
+                      segments)
 
                :else
                (let [[l-op & l-args :as left] l
                      [r-op & r-args] (if (nil? r) left r)
-                     [outer-pose outer] (path-segment (assoc outer-context :op l-op) outer-pose outer l-args)
-                     [inner-pose inner] (path-segment (assoc inner-context :op r-op) inner-pose inner r-args)]
-                 (recur (assoc outer-context :pose inner-pose)
-                        (assoc inner-context :pose outer-pose)
-                        segments
-                        outer
-                        inner))))))))
+                     outer-form (:outer-form ret)
+                     inner-form (:inner-form ret)
+                     [outer-pose outer] (path-segment (assoc outer-context :op l-op) outer-pose outer-form l-args)
+                     [inner-pose inner] (path-segment (assoc inner-context :op r-op) inner-pose inner-form r-args)]
+                 (recur (-> ret
+                            (assoc :outer-form outer)
+                            (assoc :inner-form inner)
+                            (update :outer-context assoc :pose outer-pose)
+                            (update :inner-context assoc :pose inner-pose))
+                        segments))))))))
 
 (defmethod path-segment ::left
   [{:keys [fn shape gap] :as ctx} [x y angle] segments args]
@@ -158,13 +177,6 @@
                 (m/rotatec [0 0 (- angle)])
                 (m/translate [x y 0])))]))
 
-(defmethod path-segment ::translate
-  [_ [x y angle] segments {:keys [length]}]
-  [[(+ x (* length (Math/sin angle)))
-    (+ y (* length (Math/cos angle)))
-    angle]
-   segments])
-
 (defn left [& opts]
   `(::left ~@opts))
 
@@ -186,5 +198,5 @@
 (defn context [& args]
   `(::context ~@args))
 
-(defn translate [& args]
-  `(::translate ~@args))
+(defn model [& args]
+  `(::model ~@args))
