@@ -48,7 +48,15 @@
                (let [k (first r)
                      p (next r)
                      r (path-grid outer-context inner-context p)]
-                 (recur (-> (merge-fn r ret)
+                 (recur (-> (merge-fn ret r)
+                            (assoc-in [:models k] r))
+                        segments))
+
+               (= l :extra-model)
+               (let [k (first r)
+                     p (next r)
+                     r (path-grid outer-context inner-context p)]
+                 (recur (-> ret
                             (assoc-in [:models k] r))
                         segments))
 
