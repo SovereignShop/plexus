@@ -67,9 +67,10 @@
 
 (defmethod path-segment ::left
   [{:keys [fn shape gap pose axes] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
+  (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+                 angle (/ Math/PI 2)
+                 gap gap}}] args
         degrees (* angle 57.29578)
         transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
@@ -88,9 +89,10 @@
 
 (defmethod path-segment ::right
   [{:keys [fn shape gap pose axes] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
+  (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+                 angle (/ Math/PI 2)
+                 gap gap}}] args
         degrees (* angle 57.29578)
         transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
@@ -110,9 +112,10 @@
 
 (defmethod path-segment ::up
   [{:keys [fn shape gap pose axes] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
+  (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+                 angle (/ Math/PI 2)
+                 gap gap}}] args
         transform (u/->scad-transform axes pose)
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
@@ -152,8 +155,10 @@
       (not gap) (update :form conj part))))
 
 (defmethod path-segment ::forward
-  [{:keys [fn shape pose axes] :as ctx} [& {:keys [length model twist gap mask]}]]
-  (let [transform (u/->scad-transform axes pose)
+  [{:keys [fn shape pose axes gap] :as ctx} args]
+  (let [[& {:keys [length model twist gap mask]
+            :or {gap gap}}]  args
+        transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
                (as-> (if model
                        model
