@@ -67,7 +67,7 @@ are applied in a stack-like fashion to the previous two shapes:
 
 ![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/hull-example.png)
 
-i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack.
+i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack. You can specify the parameter `n-segments` if you'd like to hull between several segments.
 
 ## Branching
 
