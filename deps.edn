@@ -1,5 +1,5 @@
 {:paths ["src/main" "resources"]
- :deps  {clj-tf/clj-tf     {:local/root "../clj-tf"}
+ :deps  {net.mikera/core.matrix {:mvn/version "0.62.0"}
          scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
  {:run-m   {:main-opts ["-m" "scad-paths.core"]}

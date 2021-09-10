@@ -216,30 +216,35 @@
 
 (comment
 
-  (->
-   (path {:curve-radius 20 :fn 70}
-         [(left :angle (/ Math/PI 1.5))
-          (up)
-          (right :angle (/ Math/PI 6))
-          (forward :length 10)
-          (right)
-          (right)
-          (hull :n-segments 4)
-          (left)
-          (forward :length 30)
-          (right)
-          (up)
-          (forward :length 100)
-          (right)
-          (right)
-          (forward :length 10)
-          (up :angle (/ Math/PI 6))
-          (forward :length 30)
-          (down :angle (/ Math/PI 6))
-          (forward :length 30)
-          (down :angle (/ Math/PI 4))
-          (forward :length 300)
-          (up :angle (/ Math/PI 2))])
-   :outer-context :form m/union)
+  (let [{:keys [outer-context inner-context]}
+        (path {:curve-radius 20 :fn 70}
+              [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+               (left :angle (/ Math/PI 2))
+               (right :angle (/ Math/PI 2))
+               (forward :length 10)
+               (up)
+               (right)
+               (left)
+               ;; (forward :length 30)
+               ;; (right)
+               ;; (up)
+               ;; (forward :length 100)
+               ;; (right)
+               ;; (right)
+               ;; (forward :length 10)
+               ;; (up :angle (/ Math/PI 6))
+               ;; (forward :length 30)
+               ;; (down :angle (/ Math/PI 6))
+               ;; (forward :length 30)
+               ;; (down :angle (/ Math/PI 4))
+               ;; (forward :length 300)
+               ;; (up :angle Math/PI)
+               ;; (forward :length 30)
+               ])]
+    (m/difference
+     (m/union (:form outer-context))
+     (m/union (:form inner-context)))
+    #_(m/difference (:form outer-context)
+                    (:form inner-context)))
 
   )

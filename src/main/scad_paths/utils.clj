@@ -1,20 +1,23 @@
 (ns scad-paths.utils
   (:require
-   [clj-tf.utils :as tf]
+   [clojure.core.matrix :as mat]
    [scad-clj.model :as m]))
 
 (def pi Math/PI)
 
+(defn half [x] (/ x 2))
+
 (defn rotation-vector
   "Rodrigues rotation formula"
   [v k a]
-  (tf/add (tf/mul (vec v)
-                  (Math/cos a))
-          (tf/mul (tf/cross k v)
-                  (Math/sin a))
-          (tf/mul (vec k)
-                  (tf/dot k v)
-                  (- 1 (Math/cos a)))))
+  (mat/add
+   (mat/mmul (vec v)
+             (Math/cos a))
+   (mat/mmul (mat/cross k v)
+             (Math/sin a))
+   (mat/mmul (vec k)
+             (mat/dot k v)
+             (- 1 (Math/cos a)))))
 
 (defn yaw
   ([v]
@@ -41,7 +44,7 @@
     (rotation-vector vz vy a)]))
 
 (defn go-forward [p v x]
-  (tf/add p (tf/mul (second v) x)))
+  (mat/add p (mat/mmul (second v) x)))
 
 (defn rotate
   [[vx vy vz] axis a]
@@ -57,7 +60,7 @@
                 (* 2 b c (Math/cos A)))))
 
 (defn angle-between [a b]
-  (Math/acos (/ (tf/dot a b) (* (tf/mag a) (tf/mag b)))))
+  (Math/acos (/ (mat/dot a b) (* ( mat/magnitude a) (mat/magnitude b)))))
 
 (defn about-equal? [v1 v2]
   (loop [[x & xs] v1
@@ -71,15 +74,15 @@
       :else false)))
 
 (defn opposing? [v1 v2]
-  (about-equal? (tf/add v1 v2) [0 0 0]))
+  (about-equal? (mat/add v1 v2) [0 0 0]))
 
 (defn- rotation-axis-and-angle [v1 v2 opp]
-  (let [cross (tf/cross v1 v2)]
+  (let [cross (mat/cross v1 v2)]
     (if (about-equal? cross [0 0 0])
       (if (opposing? v1 v2)
         [pi opp]
         [0 opp])
-      [(angle-between v1 v2) (tf/normalise cross)])))
+      [(angle-between v1 v2) (mat/normalise cross)])))
 
 (def identity-mat [[1 0 0] [0 1 0] [0 0 1]])
 
