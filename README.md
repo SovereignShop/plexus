@@ -42,6 +42,9 @@ transformation that is applied to both the outer and inner context:
      (spit "test.scad"))
 ```
 
+![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/pipe-example.png)
+
+
 This path is equivalent to the one above.
 
 ## hulls
