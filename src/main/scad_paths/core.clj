@@ -13,7 +13,8 @@
                           :curve-radius 7
                           :shell 1/2
                           :fn 10
-                          :shape (m/circle 5)
+                          :shape (binding [m/*fn* (:fn outer-context 10)]
+                                   (m/circle 5))
                           :form []
                           :pose [0 0 0]
                           :axes [[1 0 0]
@@ -144,7 +145,7 @@
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 (/ u/pi 2) 0])
+                    (m/rotatec [0 (- (/ u/pi 2)) 0])
                     transform))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
@@ -216,8 +217,28 @@
 (comment
 
   (->
-   (path {:curve-radius 20}
-         [(left :angle (/ Math/PI 1.5)) (up) (right :angle (/ Math/PI 6)) (roll) (forward :length 10) (right) (right) (hull :n-segments 4) (left) (forward :length 30) (right) (up) (forward :length 100)])
+   (path {:curve-radius 20 :fn 70}
+         [(left :angle (/ Math/PI 1.5))
+          (up)
+          (right :angle (/ Math/PI 6))
+          (forward :length 10)
+          (right)
+          (right)
+          (hull :n-segments 4)
+          (left)
+          (forward :length 30)
+          (right)
+          (up)
+          (forward :length 100)
+          (right)
+          (right)
+          (forward :length 10)
+          (up :angle (/ Math/PI 6))
+          (forward :length 30)
+          (down :angle (/ Math/PI 6))
+          (forward :length 30)
+          (down :angle (/ Math/PI 4))
+          (forward :length 300)])
    :outer-context :form m/union)
 
   )
