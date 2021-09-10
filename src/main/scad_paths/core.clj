@@ -157,8 +157,7 @@
 
 (defmethod path-segment ::forward
   [{:keys [fn shape pose axes gap] :as ctx} args]
-  (let [[& {:keys [length model twist gap mask]
-            :or {gap gap}}]  args
+  (let [[& {:keys [length model twist gap mask] :or {gap gap}}]  args
         transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
                (as-> (if model
@@ -214,7 +213,23 @@
 (defn model [& args]
   `(::model ~@args))
 
+(defn ->main-model [path]
+  (m/difference (-> path :outer-context :form m/union)
+                (-> path :inner-context :form m/union)))
+
 (comment
+
+(->> (path {:curve-radius 20 :fn 70}
+           [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+            (left :angle (/ Math/PI 2))
+            (right :angle (/ Math/PI 2))
+            (forward :length 10)
+            (up)
+            (right)
+            (left)])
+     (main-model)
+     (s/write-scad "model.scad")
+     (spit "model.scad"))
 
   (let [{:keys [outer-context inner-context]}
         (path {:curve-radius 20 :fn 70}
@@ -224,23 +239,7 @@
                (forward :length 10)
                (up)
                (right)
-               (left)
-               ;; (forward :length 30)
-               ;; (right)
-               ;; (up)
-               ;; (forward :length 100)
-               ;; (right)
-               ;; (right)
-               ;; (forward :length 10)
-               ;; (up :angle (/ Math/PI 6))
-               ;; (forward :length 30)
-               ;; (down :angle (/ Math/PI 6))
-               ;; (forward :length 30)
-               ;; (down :angle (/ Math/PI 4))
-               ;; (forward :length 300)
-               ;; (up :angle Math/PI)
-               ;; (forward :length 30)
-               ])]
+               (left)])]
     (m/difference
      (m/union (:form outer-context))
      (m/union (:form inner-context)))
