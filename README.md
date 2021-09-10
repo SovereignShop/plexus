@@ -16,11 +16,12 @@ outer and inner shapes.
          '[scad-paths.core :refer [context left right forward up down path ->main-model]]
 
 (->> (path {:curve-radius 20 :fn 70}
+             ;; Inner shape                 Outer shape
            [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-            [(left :angle (/ Math/PI 2)) (left :angle (/ Math/PI 2))]
-            [(right :angle (/ Math/PI 2)) (right :angle (/ Math/PI 2))]
-            [(forward :length 10) (forward :length 10)]
-            [(up) (up)]])
+            [(left :angle (/ Math/PI 2))   (left :angle (/ Math/PI 2))]
+            [(right :angle (/ Math/PI 2))  (right :angle (/ Math/PI 2))]
+            [(forward :length 10)          (forward :length 10)]
+            [(up)                          (up)]])
      (->main-model)
      (s/write-scad)
      (spit "test.scad"))
@@ -33,6 +34,7 @@ transformation which is then applied to both the outer and inner context:
 ``` clojure    
 (->> (path {:curve-radius 20 :fn 70}
            [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+            ;; Singular segments are applied to both outer and inner shapes.
             (left :angle (/ Math/PI 2))
             (right :angle (/ Math/PI 2))
             (forward :length 10)
