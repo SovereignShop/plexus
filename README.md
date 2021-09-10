@@ -2,13 +2,13 @@
 
 An [scad-clj](https://github.com/farrellm/scad-clj) paths library. It defines a simple, extensible language for extruding shapes in a step-wise, relative fashion using egocentric reference frames.
 
-You specify 3D models by providing a series of transformations to an outer shape and inner shape.
-
+You can specify 3D models by providing a series of transformations to outer and inner shapes.
+ 
 # Examples
 
 In the following example, our outer shape is a circle with radius of 6. The inner
-shape is a circle of radius 4. We then specify a series of transformations to then
-outer an inner shape. 
+shape is a circle of radius 4. We then specify a series of egocentric transformations to the
+outer and inner shapes. 
 
 ``` clojure
 (require '[scad-clj.scad :as s]
@@ -26,9 +26,9 @@ outer an inner shape.
      (spit "test.scad"))
 ```
 
-Obviously, there is a lot of code duplication here. After providing the shape for the inner and outer forms,
+Obviously there is a lot of code duplication here. After providing the shape for the inner and outer forms,
 the transformations we apply to each are equivalent. We can get rid of that duplication by only providing one 
-transformation that is applied to both the outer and inner context:
+transformation which is then applied to both the outer and inner context:
 
 ``` clojure    
 (->> (path {:curve-radius 20 :fn 70}
