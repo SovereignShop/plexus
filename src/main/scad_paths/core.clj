@@ -20,7 +20,7 @@
                           :axes [[1 0 0]
                                  [0 1 0]
                                  [0 0 1]]}
-         merge-fn (partial merge-with into)]
+         merge-fn (partial merge-with (partial merge-with into))]
      (loop [ret {:outer-context (into default-context outer-context)
                  :inner-context (into default-context inner-context)}
             [seg & segments] path-spec]
@@ -31,9 +31,11 @@
                ret
 
                (= l :branch)
-               (let [ret (merge-fn ret
-                                   (-> (path outer-context inner-context r)
-                                       (dissoc :outer-context :inner-context)))]
+               (let [{:keys [outer-context inner-context models]} (path outer-context inner-context r)
+                     ret (-> ret
+                             (update :models merge models)
+                             (update-in [:outer-context :form] into (:form outer-context))
+                             (update-in [:inner-context :form] into (:form inner-context)))]
                  (recur ret segments))
 
                (= l :model)

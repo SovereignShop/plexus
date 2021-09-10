@@ -74,7 +74,24 @@ i.e. it pops the previous two segments off, hulls them, then pushes the result b
 
 ## Branching
 
-TODO
+You can specify branches with a special form:
+
+``` clojure
+(->> (path {:curve-radius 10 :fn 70}
+           [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+            [:branch
+             [(left) (right) (forward :length 20)]]
+            [:branch
+             [(right) (left) (forward :length 20)]]])
+     (->main-model)
+     (s/write-scad)
+     (spit "test.scad"))
+```
+
+![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
+
+
+The body of the branch is just another path.
 
 # extensions
 
