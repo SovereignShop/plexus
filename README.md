@@ -65,7 +65,7 @@ are applied in a stack-like fashion to the previous two shapes:
      (spit "test.scad"))
 ```
 
-[[https://github.com/SovereignShop/scad-paths/blob/main/resources/images/hull-example.png|alt=hull-example]]
+[[https://github.com/SovereignShop/scad-paths/blob/main/resources/images/hull-example.png]]
 
 i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack.
 
