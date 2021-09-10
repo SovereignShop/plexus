@@ -238,7 +238,8 @@
           (down :angle (/ Math/PI 6))
           (forward :length 30)
           (down :angle (/ Math/PI 4))
-          (forward :length 300)])
+          (forward :length 300)
+          (up :angle (/ Math/PI 2))])
    :outer-context :form m/union)
 
   )
