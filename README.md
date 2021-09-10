@@ -42,12 +42,12 @@ transformation that is applied to both the outer and inner context:
      (spit "test.scad"))
 ```
 
-![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/pipe-example.png)
+![Pipe Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/pipe-example.png)
 
 
 This path is equivalent to the one above.
 
-## hulls
+## Hulls
 
 Hulls are often a great way to transform between shapes using openscad. Hulls in scad-paths
 are applied in a stack-like fashion to the previous two shapes:
@@ -88,12 +88,12 @@ You can specify branches with a special form:
      (spit "test.scad"))
 ```
 
-![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
+![Branching Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
 
 
 The body of the branch is just another path.
 
-# extensions
+# Extensions
 
 Path segments are handled by a multi-method called `path-segment` in the core namespace. You can easily extend it with your own custom segments. You simply
 have to ensure that the position and orientation are updated to correspond 
