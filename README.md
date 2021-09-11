@@ -16,7 +16,7 @@ outer and inner shapes.
          '[scad-paths.core :refer [context left right forward up down path ->main-model]]
 
 (->> (path {:curve-radius 20 :fn 70}
-             ;; Inner shape                 Outer shape
+             ;; Outer shape                 Inner shape
            [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
             [(left :angle (/ Math/PI 2))   (left :angle (/ Math/PI 2))]
             [(right :angle (/ Math/PI 2))  (right :angle (/ Math/PI 2))]
