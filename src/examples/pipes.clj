@@ -48,7 +48,7 @@
 
 ;; Branching
 
-(binding [m/*fn* 30]
+(binding [m/*fn* 40]
   (->> (path {:curve-radius 10 :fn 70}
              [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
               [:branch
@@ -58,3 +58,16 @@
        (->main-model)
        (s/write-scad)
        (spit "test.scad")))
+
+;; Gaps
+
+(->> (path {:curve-radius 20 :fn 70}
+           [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+            (left :angle (/ Math/PI 2) :gap true)
+            (right :angle (/ Math/PI 2) )
+            (forward :length 10)
+            (up :gap true)
+            (forward :length 20)])
+     (->main-model)
+     (s/write-scad)
+     (spit "test.scad"))

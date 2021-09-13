@@ -95,9 +95,27 @@ You can specify branches with a special form:
 
 The body of the branch is just another path.
 
+## Gaps
+
+You can make any segment a gap with the gap parameter:
+
+``` clojure
+(->> (path {:curve-radius 20 :fn 70}
+           [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+            (left :angle (/ Math/PI 2) :gap true)
+            (right :angle (/ Math/PI 2) )
+            (forward :length 10)
+            (up :gap true)
+            (forward :length 20)])
+     (->main-model)
+     (s/write-scad)
+     (spit "test.scad"))
+```
+
+![Gap Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/gap-example.png)
+
+
 # Extensions
 
-Path segments are handled by a multi-method called `path-segment` in the core namespace. You can easily extend it with your own custom segments. You simply
-have to ensure that the position and orientation are updated to correspond 
-to the end of your shape, where the next segment should continue. See the
+Path segments are handled by a multi-method called `path-segment` in the core namespace. You can easily extend it with your own custom segments. You simply have to ensure that the position and orientation are updated to correspond to the end of your shape, where the next segment should continue. See the
 core namespace for examples.

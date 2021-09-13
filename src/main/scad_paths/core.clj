@@ -137,9 +137,10 @@
       (not gap) (update :form conj part))))
 
 (defmethod path-segment ::down
-  [{:keys [fn shape gap pose axes rot] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
-            :or {curve-radius (:curve-radius ctx)}}] args
+  [{:keys [fn shape gap pose axes] :as ctx} args]
+  (let [[& {:keys [curve-radius angle gap]
+            :or {curve-radius (:curve-radius ctx)
+                 gap gap}}] args
         transform (u/->scad-transform axes pose)
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
@@ -188,6 +189,10 @@
                (m/hull hull-forms))]
     (assoc ctx :form (conj other-forms part))))
 
+(defmethod path-segment ::minkowski
+  [{:keys [fn form] :as ctx} [& {:keys [shape]}]]
+  (assoc ctx :shape (m/minkowski shape (:shape ctx))))
+
 (defn left [& opts]
   `(::left ~@opts))
 
@@ -214,6 +219,9 @@
 
 (defn model [& args]
   `(::model ~@args))
+
+(defn minkowski [& args]
+  `(::minkowski ~@args))
 
 (defn ->main-model [path]
   (m/difference (-> path :outer-context :form m/union)
