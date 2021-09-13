@@ -3,6 +3,10 @@
 An [scad-clj](https://github.com/farrellm/scad-clj) paths library. It defines a simple, extensible language for extruding shapes in a step-wise, relative fashion using egocentric reference frames.
 
 You can specify 3D models by providing a series of transformations to outer and inner shapes.
+
+# Status
+
+Pre-alpha, syntax and internals likely to change.
  
 # Examples
 
