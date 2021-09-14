@@ -1,9 +1,34 @@
 (ns scad-paths.core
   (:require
+   [scad-clj.scad :as s]
    [scad-paths.utils :as u]
    [scad-clj.model :as m]))
 
-(defmulti path-segment (fn [ctx _] (:op ctx)))
+(defmulti path-segment (fn [_ ctx _] (:op ctx)))
+
+(defn column->model
+  ([column] (column->model column m/union true))
+  ([column op branch?]
+   (let [tf0 (:start-transform (first column))
+         inverse-tf (u/->inverse-scad-transform tf0 u/identity-mat)]
+     (op
+      (loop [[{:keys [start-transform model branch]
+               :as seg} & column] column
+             ret []]
+        (if (nil? seg)
+          (if (not branch?) (inverse-tf (m/union ret)) (m/union ret))
+          (let [f (u/->scad-transform u/identity-mat start-transform)]
+            (recur column
+                   (cond-> ret
+                     model (conj (f model))
+                     (and branch branch?) (conj (column->model branch op branch?)))))))))))
+
+(defn to-models [segments]
+  (for [column segments]
+    (column->model column)))
+
+(defn update-last [v f & args]
+  (conj (pop v) (apply f (peek v) args)))
 
 (defn path
   ([ctx path-spec]
@@ -16,152 +41,134 @@
                           :shape (binding [m/*fn* (:fn outer-context 10)]
                                    (m/circle 5))
                           :form []
-                          :pose [0 0 0]
-                          :axes [[1 0 0]
-                                 [0 1 0]
-                                 [0 0 1]]}
-         merge-fn (partial merge-with (partial merge-with into))]
-     (loop [ret {:outer-context (into default-context outer-context)
-                 :inner-context (into default-context inner-context)}
+                          :start-transform [[1 0 0 0]
+                                            [0 1 0 0]
+                                            [0 0 1 0]
+                                            [0 0 0 0]]
+                          :end-transform [[1 0 0 0]
+                                          [0 1 0 0]
+                                          [0 0 1 0]
+                                          [0 0 0 0]]}]
+     (loop [ret [[(into default-context outer-context)]
+                 [(into default-context inner-context)]]
             [seg & segments] path-spec]
        (let [[l r] (if (vector? seg) seg [seg])
-             outer-context (:outer-context ret)
-             inner-context (:inner-context ret)]
+             outer (nth ret 0)
+             outer-context (peek outer)
+             inner (nth ret 1)
+             inner-context (peek inner)]
          (cond (nil? l)
                ret
 
+               (= l :segment)
+               (recur ret (into r segments))
+
                (= l :branch)
-               (let [{:keys [outer-context inner-context models]} (path outer-context inner-context r)
-                     ret (-> ret
-                             (update :models merge models)
-                             (update-in [:outer-context :form] into (:form outer-context))
-                             (update-in [:inner-context :form] into (:form inner-context)))]
-                 (recur ret segments))
-
-               (= l :model)
-               (let [k (first r)
-                     p (next r)
-                     r (path outer-context inner-context p)]
-                 (recur (-> (merge-fn ret r)
-                            (assoc-in [:models k] r))
-                        segments))
-
-               (= l :extra-model)
-               (let [k (first r)
-                     p (next r)
-                     r (path outer-context inner-context p)]
-                 (recur (-> ret
-                            (assoc-in [:models k] r))
+               (let [[branch-outer branch-inner] (path outer-context inner-context r)]
+                 (recur [(conj (pop outer) (assoc outer-context :branch branch-outer))
+                         (conj (pop inner) (assoc inner-context :branch branch-inner))]
                         segments))
 
                (= (first l) ::context)
-               (recur (-> ret
-                          (update :outer-context into (partition-all 2) (next l))
-                          (update :inner-context into (partition-all 2) (next r)))
+               (recur [(conj (pop outer) (into outer-context (partition-all 2) (next l)))
+                       (conj (pop inner) (into inner-context (partition-all 2) (next r)))]
                       segments)
 
                :else
                (let [[l-op & l-args :as left] l
                      [r-op & r-args] (if (nil? r) left r)
-                     new-outer-ctx (path-segment (assoc outer-context :op l-op) l-args)
-                     new-inner-ctx (path-segment (assoc inner-context :op r-op) r-args)]
-                 (recur (assoc ret :outer-context new-outer-ctx :inner-context new-inner-ctx)
+                     new-outer (path-segment outer (assoc outer-context :op l-op :start-transform (:end-transform (peek outer))) l-args)
+                     new-inner (path-segment inner (assoc inner-context :op r-op :start-transform (:end-transform (peek outer))) r-args)]
+                 (recur [new-outer new-inner]
                         segments))))))))
 
 (defmethod path-segment ::left
-  [{:keys [fn shape gap pose axes] :as ctx} args]
+  [ret {:keys [fn shape start-transform gap] :as ctx} args]
   (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
                  angle (/ Math/PI 2)
                  gap gap}}] args
         degrees (* angle 57.29578)
-        transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
-                    (m/translate [(- curve-radius) 0 0])
-                    transform))
+                    (m/translate [(- curve-radius) 0 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
-        new-axes (u/yaw axes r)
-        new-pose (u/go-forward pose new-axes d)
-        new-axes (u/yaw new-axes (- angle r))]
-    (cond-> (assoc ctx :pose new-pose :axes new-axes)
-      (not gap) (update :form conj part))))
+        tf (-> start-transform
+               (u/yaw r)
+               (u/go-forward d)
+               (u/yaw (- angle r)))]
+    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
 
 (defmethod path-segment ::right
-  [{:keys [fn shape gap pose axes] :as ctx} args]
+  [ret {:keys [fn shape gap start-transform] :as ctx} args]
   (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
                  angle (/ Math/PI 2)
                  gap gap}}] args
         degrees (* angle 57.29578)
-        transform (u/->scad-transform axes pose)
         part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 u/pi 0])
-                    transform))
+                    (m/rotatec [0 u/pi 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
-        new-axes (u/yaw axes (- r))
-        new-pose (u/go-forward pose new-axes d)
-        new-axes (u/yaw new-axes (- (- angle r)))]
-    (cond-> (assoc ctx :pose new-pose :axes new-axes)
-      (not gap) (update :form conj part))))
+        tf (-> start-transform
+               (u/yaw (- r))
+               (u/go-forward d)
+               (u/yaw (- (- angle r))))]
+    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
 
 (defmethod path-segment ::up
-  [{:keys [fn shape gap pose axes] :as ctx} args]
+  [ret {:keys [fn shape gap start-transform] :as ctx} args]
   (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
                  angle (/ Math/PI 2)
                  gap gap}}] args
-        transform (u/->scad-transform axes pose)
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 (/ u/pi 2) 0])
-                    transform))
+                    (m/rotatec [0 (/ u/pi 2) 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
-        new-axes (u/pitch axes r)
-        new-pose (u/go-forward pose new-axes d)
-        new-axes (u/pitch new-axes (- angle r))]
-    (cond-> (assoc ctx :pose new-pose :axes new-axes)
-      (not gap) (update :form conj part))))
+        tf (-> start-transform
+               (u/pitch r)
+               (u/go-forward d)
+               (u/pitch (- angle r)))]
+    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
 
 (defmethod path-segment ::down
-  [{:keys [fn shape gap pose axes] :as ctx} args]
+  [ret {:keys [fn shape gap start-transform] :as ctx} args]
   (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
+                 angle (/ Math/PI 2)
                  gap gap}}] args
-        transform (u/->scad-transform axes pose)
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 (- (/ u/pi 2)) 0])
-                    transform))
+                    (m/rotatec [0 (- (/ u/pi 2)) 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
-        new-axes (u/pitch axes (- r))
-        new-pose (u/go-forward pose new-axes d)
-        new-axes (u/pitch new-axes (- (- angle r)))]
-    (cond-> (assoc ctx :pose new-pose :axes new-axes)
-      (not gap) (update :form conj part))))
+        tf  (-> start-transform
+                (u/pitch (- r))
+                (u/go-forward d)
+                (u/pitch (- (- angle r))))]
+    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
 
 (defmethod path-segment ::forward
-  [{:keys [fn shape pose axes gap] :as ctx} args]
-  (let [[& {:keys [length model twist gap mask] :or {gap gap}}]  args
-        transform (u/->scad-transform axes pose)
+  [ret {:keys [fn shape start-transform gap] :as ctx} args]
+  (let [
+        [& {:keys [length model twist gap mask] :or {gap gap}}]  args
         part (binding [m/*fn* fn]
                (as-> (if model
                        model
@@ -170,28 +177,29 @@
                  (m/rotatec [(- (u/half u/pi)) 0 0] m)
                  (if mask
                    (m/difference m mask)
-                   m)
-                 (transform m)))
-        new-pose (u/go-forward pose axes length)]
-    (cond-> (assoc ctx :pose new-pose)
-      (not gap) (update :form conj part))))
+                   m)))
+        tf (u/go-forward start-transform length)]
+    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
 
 (defmethod path-segment ::roll
-  [{:keys [axes] :as ctx} [& {:keys [angle] :or {angle (/ Math/PI 2)}}]]
-  (let [new-axes (u/roll axes angle)]
-    (assoc ctx :axes new-axes)))
+  [ret {:keys [start-transform] :as ctx} [& {:keys [angle] :or {angle (/ Math/PI 2)}}]]
+  (let [new-axes (u/roll start-transform angle)]
+    (conj ret (assoc ctx :end-transform new-axes))))
 
 (defmethod path-segment ::hull
-  [{:keys [fn form] :as ctx} [& {:keys [n-segments] :or {n-segments 2}}]]
-  (let [hull-forms (into () (take n-segments) (map peek (iterate pop form)))
-        other-forms (nth (iterate pop form) n-segments)
-        part (binding [m/*fn* fn]
-               (m/hull hull-forms))]
-    (assoc ctx :form (conj other-forms part))))
+  [ret {:keys [fn] :as ctx} [& {:keys [n-segments] :or {n-segments 2}}]]
+  (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
+        other-forms (nth (iterate pop ret) n-segments)
+        model (binding [m/*fn* fn]
+                (column->model hull-segments m/hull false))]
+    (conj other-forms (assoc ctx
+                             :model model
+                             :start-transform (:start-transform (first hull-segments))
+                             :end-transform (:end-transform (last hull-segments))))))
 
 (defmethod path-segment ::minkowski
-  [{:keys [fn form] :as ctx} [& {:keys [shape]}]]
-  (assoc ctx :shape (m/minkowski shape (:shape ctx))))
+  [ret {:keys [fn form] :as ctx} [& {:keys [shape]}]]
+  (conj ret (assoc ctx :shape (m/minkowski shape (:shape ctx)) :model nil)))
 
 (defn left [& opts]
   `(::left ~@opts))
@@ -223,37 +231,25 @@
 (defn minkowski [& args]
   `(::minkowski ~@args))
 
-(defn ->main-model [path]
-  (m/difference (-> path :outer-context :form m/union)
-                (-> path :inner-context :form m/union)))
+(defn ->main-model [segments]
+  (->> (to-models segments)
+       ((juxt first second))
+       (m/difference)))
+
+(defn look-at-segment [segments n]
+  (let [segment (nth (nth segments 0) n)]
+    (-> (to-models segments)
+        (first)
+        ((u/->inverse-scad-transform (:end-transform segment) u/identity-mat)))))
 
 (comment
 
-(->> (path {:curve-radius 20 :fn 70}
-           [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-            (left :angle (/ Math/PI 2))
-            (right :angle (/ Math/PI 2))
-            (forward :length 10)
-            (up)
-            (right)
-            (left)])
-     (main-model)
-     (s/write-scad "model.scad")
-     (spit "model.scad"))
-
-  (let [{:keys [outer-context inner-context]}
-        (path {:curve-radius 20 :fn 70}
-              [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-               (left :angle (/ Math/PI 2))
-               (right :angle (/ Math/PI 2))
-               (forward :length 10)
-               (up)
-               (right)
-               (left)])]
-    (m/difference
-     (m/union (:form outer-context))
-     (m/union (:form inner-context)))
-    #_(m/difference (:form outer-context)
-                    (:form inner-context)))
+  (-> (path {:curve-radius 20 :fn 70}
+            [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+             (up)
+             (down)
+             (up)
+             (left)])
+      (look-at-segment 4))
 
   )

@@ -3,6 +3,8 @@
    [clojure.core.matrix :as mat]
    [scad-clj.model :as m]))
 
+#_(mat/set-current-implementation :vectorz)
+
 (def pi Math/PI)
 
 (defn half [x] (/ x 2))
@@ -19,38 +21,74 @@
              (mat/dot k v)
              (- 1 (Math/cos a)))))
 
-(defn yaw
-  ([v]
-   (yaw v (/ pi 2)))
+(defn rotation-matrix [m]
+  (mat/select m :butlast :butlast))
+
+(defn translation-vector [m]
+  (mat/select m :butlast 3))
+
+
+(defn set-translation [m v]
+  (mat/set-column m 3 (mat/conjoin v 0)))
+
+(defn update-rotation
+  ([m f]
+   (as-> (f (rotation-matrix m)) m*
+     (mat/join-along 1 m* (mat/column-matrix (translation-vector m)))
+     (mat/join-along 0 m* [0 0 0 0])))
+  ([m f a]
+   (as-> (f (rotation-matrix m) a) m*
+     (mat/join-along 1 m* (mat/column-matrix (translation-vector m)))
+     (mat/join-along 0 m* [0 0 0 0])))
+  ([m f a b]
+   (as-> (f (rotation-matrix m) a b) m*
+     (mat/join-along 1 m* (mat/column-matrix (translation-vector m)))
+     (mat/join-along 0 m* [0 0 0 0]))))
+
+(defn yaw*
   ([[vx vy vz] a]
    [(rotation-vector vx vz a)
     (rotation-vector vy vz a)
     vz]))
 
-(defn pitch
-  ([v]
-   (pitch v (/ pi 2)))
+(defn yaw [m a]
+  (update-rotation m yaw* a))
+
+(defn pitch*
   ([[vx vy vz] a]
    [vx
     (rotation-vector vy vx a)
     (rotation-vector vz vx a)]))
 
-(defn roll
-  ([v]
-   (roll v (/ pi 2)))
+(defn pitch [m a]
+  (update-rotation m pitch* a))
+
+(defn roll*
   ([[vx vy vz] a]
    [(rotation-vector vx vy a)
     vy
     (rotation-vector vz vy a)]))
 
-(defn go-forward [p v x]
-  (mat/add p (mat/mmul (second v) x)))
+(defn roll [m a]
+  (update-rotation m roll* a))
+
+(defn go-forward [m x]
+  (let [v (mat/select m 1 :butlast)
+        t (mat/select m :all 3)
+        tr (mat/add t (mat/mmul (mat/conjoin-along 0 v 0) x))]
+    (mat/join-along
+     1
+     (mat/select m :all :butlast)
+     (mat/column-matrix tr))))
 
 (defn rotate
   [[vx vy vz] axis a]
   [(rotation-vector vx axis a)
    (rotation-vector vy axis a)
    (rotation-vector vz axis a)])
+
+(defn invert [m]
+  (mat/inverse (mat/matrix m)))
 
 (defn bAc->a
   "side,angle,side -> side via. law of cosines."
@@ -84,16 +122,33 @@
         [0 opp])
       [(angle-between v1 v2) (mat/normalise cross)])))
 
-(def identity-mat [[1 0 0] [0 1 0] [0 0 1]])
+(def identity-mat [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 0]])
 
 (defn ->scad-transform
-  "Make an OpenSCAD transformation function between two coordinate frames offset by `pose`."
-  ([m pose] (->scad-transform identity-mat m pose))
-  ([a b pose]
-   (let [[angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
+  "Make an OpenSCAD transformation function between two coordinate frames."
+  ([m] (->scad-transform identity-mat m))
+  ([m1 m2]
+   (let [translation (mat/sub (translation-vector m2) (translation-vector m1))
+         a (rotation-matrix m1)
+         b (rotation-matrix m2)
+         [angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
          c (rotate a ortho angle)
          [angle-2 ortho-2] (rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
      (comp
-      (partial m/translate pose)
+      (partial m/translate translation)
       (partial m/rotatev (- angle-2) ortho-2)
       (partial m/rotatev angle ortho)))))
+
+(defn ->inverse-scad-transform
+  ([m] (->scad-transform identity-mat m))
+  ([m1 m2]
+   (let [translation (mat/sub (translation-vector m2) (translation-vector m1))
+         a (rotation-matrix m1)
+         b (rotation-matrix m2)
+         [angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
+         c (rotate a ortho angle)
+         [angle-2 ortho-2] (rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
+     (comp
+      (partial m/rotatev (- angle-2) ortho-2)
+      (partial m/rotatev angle ortho)
+      (partial m/translate translation)))))
