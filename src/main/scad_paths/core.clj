@@ -249,13 +249,21 @@
 (defn minkowski [& args]
   `(::minkowski ~@args))
 
-(defn look-at-segment [segments n]
-  (let [segment (nth (nth segments 0) n)]
-    (-> (to-models segments)
-        (first)
-        ((u/->inverse-scad-transform (:end-transform segment) u/identity-mat)))))
+(defn join-segments [a b]
+  (let [model (column->model [a b] m/union false)]))
 
-#_(defmacro defmodel [name ctx path-spec]
+(defn look-at-segment [model n]
+  (let [segments (-> model meta :segments)
+        segment (nth (nth segments 0) n)
+        f (u/->inverse-scad-transform (:end-transform segment) u/identity-mat)]
+    (f model)))
+
+#_(defn conjoin-models [a b]
+    (let [end-tf (-> b meta :end-transform)
+          f (u/->inverse-scad-transform end-tf u/identity-mat)]
+      (m/union a (f b))))
+
+(defmacro defmodel [name ctx path-spec]
   `(def ~name
      (binding [m/*fn* (:fn ~ctx 10)]
        (path ~ctx ~path-spec))))
