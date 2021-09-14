@@ -11,22 +11,21 @@
   ([column op branch?]
    (let [start-tf (:start-transform (first column))
          inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
-     (op
-      (loop [end-tf start-tf
-             [{:keys [start-transform end-transform model branch]
-               :as seg} & column] column
-             ret []]
-        (if (nil? seg)
-          (with-meta
-            (if (not branch?) (inverse-tf (m/union ret)) (m/union ret))
-            {:start-transform start-tf
-             :end-transform end-tf})
-          (let [f (u/->scad-transform u/identity-mat start-transform)]
-            (recur end-transform
-                   column
-                   (cond-> ret
-                     model (conj (f model))
-                     (and branch branch?) (conj (column->model branch op branch?)))))))))))
+     (loop [end-tf start-tf
+            [{:keys [start-transform end-transform model branch]
+              :as seg} & column] column
+            ret []]
+       (if (nil? seg)
+         (with-meta
+           (if (not branch?) (inverse-tf (op ret)) (op ret))
+           {:start-transform start-tf
+            :end-transform end-tf})
+         (let [f (u/->scad-transform u/identity-mat start-transform)]
+           (recur end-transform
+                  column
+                  (cond-> ret
+                    model (conj (f model))
+                    (and branch branch?) (conj (column->model branch op branch?))))))))))
 
 (defn to-models [segments]
   (for [column segments]
@@ -255,6 +254,11 @@
     (-> (to-models segments)
         (first)
         ((u/->inverse-scad-transform (:end-transform segment) u/identity-mat)))))
+
+#_(defmacro defmodel [name ctx path-spec]
+  `(def ~name
+     (binding [m/*fn* (:fn ~ctx 10)]
+       (path ~ctx ~path-spec))))
 
 (comment
 
