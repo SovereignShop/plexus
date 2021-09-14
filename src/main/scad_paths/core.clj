@@ -9,16 +9,21 @@
 (defn column->model
   ([column] (column->model column m/union true))
   ([column op branch?]
-   (let [tf0 (:start-transform (first column))
-         inverse-tf (u/->inverse-scad-transform tf0 u/identity-mat)]
+   (let [start-tf (:start-transform (first column))
+         inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
      (op
-      (loop [[{:keys [start-transform model branch]
+      (loop [end-tf start-tf
+             [{:keys [start-transform end-transform model branch]
                :as seg} & column] column
              ret []]
         (if (nil? seg)
-          (if (not branch?) (inverse-tf (m/union ret)) (m/union ret))
+          (with-meta
+            (if (not branch?) (inverse-tf (m/union ret)) (m/union ret))
+            {:start-transform start-tf
+             :end-transform end-tf})
           (let [f (u/->scad-transform u/identity-mat start-transform)]
-            (recur column
+            (recur end-transform
+                   column
                    (cond-> ret
                      model (conj (f model))
                      (and branch branch?) (conj (column->model branch op branch?)))))))))))
@@ -27,10 +32,23 @@
   (for [column segments]
     (column->model column)))
 
+(defn ->model [segments path-spec]
+  (let [[outer-model inner-model] (to-models segments)]
+    (with-meta
+      (m/difference outer-model inner-model)
+      {:segments segments
+       :path-spec path-spec
+       :start-transform (-> outer-model meta :start-transform)
+       :end-transform (-> outer-model meta :end-transform)
+       :outer-model outer-model
+       :inner-model inner-model})))
+
 (defn update-last [v f & args]
   (conj (pop v) (apply f (peek v) args)))
 
 (defn path
+  ([path-spec]
+   (path nil path-spec))
   ([ctx path-spec]
    (path ctx ctx path-spec))
   ([outer-context inner-context path-spec]
@@ -58,13 +76,14 @@
              inner (nth ret 1)
              inner-context (peek inner)]
          (cond (nil? l)
-               ret
+               (->model ret path-spec)
 
                (= l :segment)
-               (recur ret (into r segments))
+               (recur ret (into (or (-> r meta :path-spec) r) segments))
 
                (= l :branch)
-               (let [[branch-outer branch-inner] (path outer-context inner-context r)]
+               (let [model (path outer-context inner-context (:path-spec (meta r) r))
+                     [branch-outer branch-inner] (-> model meta :segments)]
                  (recur [(conj (pop outer) (assoc outer-context :branch branch-outer))
                          (conj (pop inner) (assoc inner-context :branch branch-inner))]
                         segments))
@@ -230,11 +249,6 @@
 
 (defn minkowski [& args]
   `(::minkowski ~@args))
-
-(defn ->main-model [segments]
-  (->> (to-models segments)
-       ((juxt first second))
-       (m/difference)))
 
 (defn look-at-segment [segments n]
   (let [segment (nth (nth segments 0) n)]
