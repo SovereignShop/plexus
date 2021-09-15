@@ -1,6 +1,7 @@
 (ns scad-paths.core
   (:require
    [scad-clj.scad :as s]
+   [scad-paths.segment :as sg]
    [scad-paths.utils :as u]
    [scad-clj.model :as m]))
 
@@ -13,20 +14,19 @@
          start-tf (:start-transform first-segment-data)
          inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
      (loop [segment-data first-segment-data
-            [seg & segments] segments
+            [seg & segs] segments
             ret []]
-       (let [{:keys [start-transform branch]} (meta seg)]
+       (let [{:keys [branch]} (meta seg)]
          (if (nil? seg)
            (with-meta
              (if (not join-branch?) (inverse-tf (join-op ret)) (join-op ret))
              (assoc segment-data
                     :segments segments
                     :start-transform start-tf))
-           (let [f (u/->scad-transform u/identity-mat start-transform)]
-             (recur (meta seg)
-                    segments
-                    (cond-> (conj ret (f seg))
-                      (and branch join-branch?) (conj (join-segments branch join-op join-branch?)))))))))))
+           (recur (meta seg)
+                  segs
+                  (cond-> (conj ret (sg/project seg))
+                    (and branch join-branch?) (conj (join-segments branch join-op join-branch?))))))))))
 
 (defn ->model [segments path-spec]
   (let [[outer-section inner-section] (map join-segments segments)]
@@ -35,7 +35,6 @@
       {:segments segments
        :path-spec path-spec
        :start-transform (-> outer-section meta :start-transform)
-       :end-transform (-> outer-section meta :end-transform)
        :outer-model outer-section
        :inner-model inner-section})))
 
@@ -81,8 +80,8 @@
                :else
                (let [[l-op & l-args :as left] l
                      [r-op & r-args] (if (nil? r) left r)
-                     new-outer (path-segment outer (assoc (meta outer-segment) :op l-op :start-transform (:end-transform (meta (peek outer)))) l-args)
-                     new-inner (path-segment inner (assoc (meta inner-segment) :op r-op :start-transform (:end-transform (meta (peek outer)))) r-args)]
+                     new-outer (path-segment outer (assoc (meta outer-segment) :op #dbg l-op :start-transform (:end-transform (meta (peek outer)))) l-args)
+                     new-inner (path-segment inner (assoc (meta inner-segment) :op #dbg r-op :start-transform (:end-transform (meta (peek outer)))) r-args)]
                  (recur [new-outer new-inner]
                         segments))))))))
 
@@ -195,6 +194,13 @@
                       (join-segments hull-segments m/hull false))]
     (conj other-forms new-segment)))
 
+(defmethod path-segment ::no-op
+  [ret _ _]
+  ret)
+
+(defn no-op [& opts]
+  `(::no-op ~@opts))
+
 (defn left [& opts]
   `(::left ~@opts))
 
@@ -222,16 +228,16 @@
 (defn model [& args]
   `(::model ~@args))
 
-(defn look-at-segment [model n]
-  (let [segments (-> model meta :segments)
-        segment (nth (nth segments 0) n)
-        f (u/->inverse-scad-transform (:end-transform segment) u/identity-mat)]
-    (f model)))
-
 (defmacro defmodel [name ctx path-spec]
   `(def ~name
      (binding [m/*fn* (:fn ~ctx 10)]
        (path ~ctx ~path-spec))))
+
+(defn get-start-transform [segment]
+  (-> segment meta :start-transform))
+
+(defn get-end-transform [segment]
+  (-> segment meta :end-transform))
 
 (comment
 

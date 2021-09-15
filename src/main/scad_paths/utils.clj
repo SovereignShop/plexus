@@ -77,11 +77,21 @@
      (mat/select m :all :butlast)
      (mat/column-matrix tr))))
 
-(defn rotate
+(defn rotate33
   [[vx vy vz] axis a]
   [(rotation-vector vx axis a)
    (rotation-vector vy axis a)
    (rotation-vector vz axis a)])
+
+(defn rotate [m axis a]
+  (update-rotation m rotate33 axis a))
+
+(defn translate [m p]
+  (let [tr (mat/select m :all 3)]
+    (mat/join-along
+     1
+     (mat/select m :all :butlast)
+     (mat/column-matrix (mat/add tr (mat/conjoin-along 0 p 0))))))
 
 (defn invert [m]
   (mat/inverse (mat/matrix m)))
@@ -110,7 +120,7 @@
 (defn opposing? [v1 v2]
   (about-equal? (mat/add v1 v2) [0 0 0]))
 
-(defn- rotation-axis-and-angle [v1 v2 opp]
+(defn rotation-axis-and-angle [v1 v2 opp]
   (let [cross (mat/cross v1 v2)]
     (if (about-equal? cross [0 0 0])
       (if (opposing? v1 v2)
@@ -128,7 +138,7 @@
          a (rotation-matrix m1)
          b (rotation-matrix m2)
          [angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-         c (rotate a ortho angle)
+         c (rotate33 a ortho angle)
          [angle-2 ortho-2] (rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
      (comp
       (partial m/translate translation)
@@ -136,15 +146,16 @@
       (partial m/rotatev angle ortho)))))
 
 (defn ->inverse-scad-transform
-  ([m] (->scad-transform identity-mat m))
+  ([m] (->inverse-scad-transform identity-mat m))
   ([m1 m2]
    (let [translation (mat/sub (translation-vector m2) (translation-vector m1))
          a (rotation-matrix m1)
          b (rotation-matrix m2)
          [angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-         c (rotate a ortho angle)
+         c (rotate33 a ortho angle)
          [angle-2 ortho-2] (rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
-     (comp
-      (partial m/rotatev (- angle-2) ortho-2)
-      (partial m/rotatev angle ortho)
-      (partial m/translate translation)))))
+     (fn [seg]
+       (->> seg
+            (m/translate translation)
+            (m/rotatev angle ortho)
+            (m/rotatev (- angle-2) ortho-2))))))
