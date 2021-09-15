@@ -27,10 +27,6 @@
 (defn translation-vector [m]
   (mat/select m :butlast 3))
 
-
-(defn set-translation [m v]
-  (mat/set-column m 3 (mat/conjoin v 0)))
-
 (defn update-rotation
   ([m f]
    (as-> (f (rotation-matrix m)) m*
@@ -47,9 +43,9 @@
 
 (defn yaw*
   ([[vx vy vz] a]
-   [(rotation-vector vx vz a)
-    (rotation-vector vy vz a)
-    vz]))
+   [(rotation-vector vx vy a)
+    vy
+    (rotation-vector vz vy a)]))
 
 (defn yaw [m a]
   (update-rotation m yaw* a))
@@ -65,16 +61,16 @@
 
 (defn roll*
   ([[vx vy vz] a]
-   [(rotation-vector vx vy a)
-    vy
-    (rotation-vector vz vy a)]))
+   [(rotation-vector vx vz a)
+    (rotation-vector vy vz a)
+    vz]))
 
 (defn roll [m a]
   (update-rotation m roll* a))
 
 (defn go-forward [m x]
-  (let [v (mat/select m 1 :butlast)
-        t (mat/select m :all 3)
+  (let [v  (mat/select m 2 :butlast)
+        t  (mat/select m :all 3)
         tr (mat/add t (mat/mmul (mat/conjoin-along 0 v 0) x))]
     (mat/join-along
      1

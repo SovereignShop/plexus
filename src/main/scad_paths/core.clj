@@ -96,13 +96,14 @@
                (->> shape
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
-                    (m/translate [(- curve-radius) 0 0])))
+                    (m/translate [(- curve-radius) 0 0])
+                    (m/rotatec [(/ Math/PI 2) 0 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
-               (u/yaw r)
+               (u/yaw (- r))
                (u/go-forward d)
-               (u/yaw (- angle r)))]
+               (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::right
@@ -116,13 +117,13 @@
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 u/pi 0])))
+                    (m/rotatec [(- (/ u/pi 2)) u/pi 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
-               (u/yaw (- r))
+               (u/yaw r)
                (u/go-forward d)
-               (u/yaw (- (- angle r))))]
+               (u/yaw (- angle r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::up
@@ -137,7 +138,7 @@
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 (/ u/pi 2) 0])))
+                    (m/rotatec [(/ u/pi 2) 0 (/ u/pi 2)])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -148,7 +149,7 @@
 
 (defmethod path-segment ::down
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle gap]
+  (let [[& {:keys [curve-radius angle]
             :or {curve-radius (:curve-radius ctx)
                  angle (/ Math/PI 2)}}] args
         degrees  (* angle 57.29578)
@@ -157,7 +158,7 @@
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [0 (- (/ u/pi 2)) 0])))
+                    (m/rotatec [(/ u/pi 2) 0 (- (/ u/pi 2))])))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf  (-> start-transform
@@ -175,7 +176,6 @@
                        model
                        (->> shape
                             (m/extrude-linear {:height length :center false :twist twist}))) m
-                 (m/rotatec [(- (u/half u/pi)) 0 0] m)
                  (if mask
                    (m/difference m mask)
                    m)))
@@ -248,9 +248,9 @@
 
   (path {:curve-radius 10 :fn 10}
         [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-         [:branch
-          [(left) (right) (forward :length 20)]]
-         [:branch
-          [(right) (left) (forward :length 20)]]])
+         (down)
+         (left)
+         (right)
+         (forward :length 20)])
 
   )
