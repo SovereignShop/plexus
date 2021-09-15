@@ -6,106 +6,91 @@
 
 (defmulti path-segment (fn [_ ctx _] (:op ctx)))
 
-(defn column->model
-  ([column] (column->model column m/union true))
-  ([column op branch?]
-   (let [start-tf (:start-transform (first column))
+(defn join-segments
+  ([segments] (join-segments segments m/union true))
+  ([segments join-op join-branch?]
+   (let [first-segment-data (meta (first segments))
+         start-tf (:start-transform first-segment-data)
          inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
-     (loop [end-tf start-tf
-            [{:keys [start-transform end-transform model branch]
-              :as seg} & column] column
+     (loop [segment-data first-segment-data
+            [seg & segments] segments
             ret []]
-       (if (nil? seg)
-         (with-meta
-           (if (not branch?) (inverse-tf (op ret)) (op ret))
-           {:start-transform start-tf
-            :end-transform end-tf})
-         (let [f (u/->scad-transform u/identity-mat start-transform)]
-           (recur end-transform
-                  column
-                  (cond-> ret
-                    model (conj (f model))
-                    (and branch branch?) (conj (column->model branch op branch?))))))))))
-
-(defn to-models [segments]
-  (for [column segments]
-    (column->model column)))
+       (let [{:keys [start-transform branch]} (meta seg)]
+         (if (nil? seg)
+           (with-meta
+             (if (not join-branch?) (inverse-tf (join-op ret)) (join-op ret))
+             (assoc segment-data
+                    :segments segments
+                    :start-transform start-tf))
+           (let [f (u/->scad-transform u/identity-mat start-transform)]
+             (recur (meta seg)
+                    segments
+                    (cond-> (conj ret (f seg))
+                      (and branch join-branch?) (conj (join-segments branch join-op join-branch?)))))))))))
 
 (defn ->model [segments path-spec]
-  (let [[outer-model inner-model] (to-models segments)]
+  (let [[outer-section inner-section] (map join-segments segments)]
     (with-meta
-      (m/difference outer-model inner-model)
+      (m/difference outer-section inner-section)
       {:segments segments
        :path-spec path-spec
-       :start-transform (-> outer-model meta :start-transform)
-       :end-transform (-> outer-model meta :end-transform)
-       :outer-model outer-model
-       :inner-model inner-model})))
-
-(defn update-last [v f & args]
-  (conj (pop v) (apply f (peek v) args)))
+       :start-transform (-> outer-section meta :start-transform)
+       :end-transform (-> outer-section meta :end-transform)
+       :outer-model outer-section
+       :inner-model inner-section})))
 
 (defn path
   ([path-spec]
    (path nil path-spec))
   ([ctx path-spec]
    (path ctx ctx path-spec))
-  ([outer-context inner-context path-spec]
-   (let [default-context {:or 10
-                          :curve-radius 7
-                          :shell 1/2
+  ([outer-segment inner-segment path-spec]
+   (let [default-context {:curve-radius 7
                           :fn 10
-                          :shape (binding [m/*fn* (:fn outer-context 10)]
+                          :shape (binding [m/*fn* (:fn outer-segment 10)]
                                    (m/circle 5))
-                          :form []
-                          :start-transform [[1 0 0 0]
-                                            [0 1 0 0]
-                                            [0 0 1 0]
-                                            [0 0 0 0]]
-                          :end-transform [[1 0 0 0]
-                                          [0 1 0 0]
-                                          [0 0 1 0]
-                                          [0 0 0 0]]}]
-     (loop [ret [[(into default-context outer-context)]
-                 [(into default-context inner-context)]]
+                          :start-transform u/identity-mat
+                          :end-transform u/identity-mat}]
+     (loop [ret [[(with-meta (m/union) (into default-context outer-segment))]
+                 [(with-meta (m/union) (into default-context inner-segment))]]
             [seg & segments] path-spec]
        (let [[l r] (if (vector? seg) seg [seg])
              outer (nth ret 0)
-             outer-context (peek outer)
+             outer-segment (peek outer)
              inner (nth ret 1)
-             inner-context (peek inner)]
+             inner-segment (peek inner)]
          (cond (nil? l)
                (->model ret path-spec)
 
                (= l :segment)
                (recur ret (into (or (-> r meta :path-spec) r) segments))
 
+
                (= l :branch)
-               (let [model (path outer-context inner-context (:path-spec (meta r) r))
+               (let [model (path (meta outer-segment) (meta inner-segment) (:path-spec (meta r) r))
                      [branch-outer branch-inner] (-> model meta :segments)]
-                 (recur [(conj (pop outer) (assoc outer-context :branch branch-outer))
-                         (conj (pop inner) (assoc inner-context :branch branch-inner))]
+                 (recur [(conj (pop outer) (vary-meta outer-segment assoc :branch branch-outer))
+                         (conj (pop inner) (vary-meta inner-segment assoc :branch branch-inner))]
                         segments))
 
                (= (first l) ::context)
-               (recur [(conj (pop outer) (into outer-context (partition-all 2) (next l)))
-                       (conj (pop inner) (into inner-context (partition-all 2) (next r)))]
+               (recur [(conj (pop outer) (vary-meta outer-segment into (partition-all 2) (next l)))
+                       (conj (pop inner) (vary-meta inner-segment into (partition-all 2) (next r)))]
                       segments)
 
                :else
                (let [[l-op & l-args :as left] l
                      [r-op & r-args] (if (nil? r) left r)
-                     new-outer (path-segment outer (assoc outer-context :op l-op :start-transform (:end-transform (peek outer))) l-args)
-                     new-inner (path-segment inner (assoc inner-context :op r-op :start-transform (:end-transform (peek outer))) r-args)]
+                     new-outer (path-segment outer (assoc (meta outer-segment) :op l-op :start-transform (:end-transform (meta (peek outer)))) l-args)
+                     new-inner (path-segment inner (assoc (meta inner-segment) :op r-op :start-transform (:end-transform (meta (peek outer)))) r-args)]
                  (recur [new-outer new-inner]
                         segments))))))))
 
 (defmethod path-segment ::left
-  [ret {:keys [fn shape start-transform gap] :as ctx} args]
-  (let [[& {:keys [curve-radius angle gap]
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [[& {:keys [curve-radius angle]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)
-                 gap gap}}] args
+                 angle (/ Math/PI 2)}}] args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -118,14 +103,13 @@
                (u/yaw r)
                (u/go-forward d)
                (u/yaw (- angle r)))]
-    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::right
-  [ret {:keys [fn shape gap start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle gap]
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [[& {:keys [curve-radius angle]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)
-                 gap gap}}] args
+                 angle (/ Math/PI 2)}}] args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -139,7 +123,7 @@
                (u/yaw (- r))
                (u/go-forward d)
                (u/yaw (- (- angle r))))]
-    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::up
   [ret {:keys [fn shape gap start-transform] :as ctx} args]
@@ -160,14 +144,13 @@
                (u/pitch r)
                (u/go-forward d)
                (u/pitch (- angle r)))]
-    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::down
-  [ret {:keys [fn shape gap start-transform] :as ctx} args]
+  [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [[& {:keys [curve-radius angle gap]
             :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)
-                 gap gap}}] args
+                 angle (/ Math/PI 2)}}] args
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -181,7 +164,7 @@
                 (u/pitch (- r))
                 (u/go-forward d)
                 (u/pitch (- (- angle r))))]
-    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::forward
   [ret {:keys [fn shape start-transform gap] :as ctx} args]
@@ -197,7 +180,7 @@
                    (m/difference m mask)
                    m)))
         tf (u/go-forward start-transform length)]
-    (conj ret (assoc ctx :end-transform tf :model (when-not gap part)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::roll
   [ret {:keys [start-transform] :as ctx} [& {:keys [angle] :or {angle (/ Math/PI 2)}}]]
@@ -205,19 +188,12 @@
     (conj ret (assoc ctx :end-transform new-axes))))
 
 (defmethod path-segment ::hull
-  [ret {:keys [fn] :as ctx} [& {:keys [n-segments] :or {n-segments 2}}]]
+  [ret {:keys [fn]} [& {:keys [n-segments] :or {n-segments 2}}]]
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
-        model (binding [m/*fn* fn]
-                (column->model hull-segments m/hull false))]
-    (conj other-forms (assoc ctx
-                             :model model
-                             :start-transform (:start-transform (first hull-segments))
-                             :end-transform (:end-transform (last hull-segments))))))
-
-(defmethod path-segment ::minkowski
-  [ret {:keys [fn form] :as ctx} [& {:keys [shape]}]]
-  (conj ret (assoc ctx :shape (m/minkowski shape (:shape ctx)) :model nil)))
+        new-segment (binding [m/*fn* fn]
+                      (join-segments hull-segments m/hull false))]
+    (conj other-forms new-segment)))
 
 (defn left [& opts]
   `(::left ~@opts))
@@ -246,22 +222,11 @@
 (defn model [& args]
   `(::model ~@args))
 
-(defn minkowski [& args]
-  `(::minkowski ~@args))
-
-(defn join-segments [a b]
-  (let [model (column->model [a b] m/union false)]))
-
 (defn look-at-segment [model n]
   (let [segments (-> model meta :segments)
         segment (nth (nth segments 0) n)
         f (u/->inverse-scad-transform (:end-transform segment) u/identity-mat)]
     (f model)))
-
-#_(defn conjoin-models [a b]
-    (let [end-tf (-> b meta :end-transform)
-          f (u/->inverse-scad-transform end-tf u/identity-mat)]
-      (m/union a (f b))))
 
 (defmacro defmodel [name ctx path-spec]
   `(def ~name
@@ -270,12 +235,22 @@
 
 (comment
 
-  (-> (path {:curve-radius 20 :fn 70}
-            [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-             (up)
-             (down)
-             (up)
-             (left)])
-      (look-at-segment 4))
+  (defmodel hull-test
+    {:curve-radius 20 :fn 70}
+    [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+     (forward :length 10)
+     [(context :shape (m/circle 10)) (context :shape (m/circle 8))]
+     (forward :length 10)
+     (hull)
+     [(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+     (forward :length 10)
+     (hull)])
+
+  (path {:curve-radius 10 :fn 10}
+        [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+         [:branch
+          [(left) (right) (forward :length 20)]]
+         [:branch
+          [(right) (left) (forward :length 20)]]])
 
   )
