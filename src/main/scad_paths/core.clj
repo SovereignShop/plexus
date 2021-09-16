@@ -46,8 +46,6 @@
   ([outer-segment inner-segment path-spec]
    (let [default-context {:curve-radius 7
                           :fn 10
-                          :shape (binding [m/*fn* (:fn outer-segment 10)]
-                                   (m/circle 5))
                           :start-transform u/identity-mat
                           :end-transform u/identity-mat}]
      (loop [ret [[(with-meta (m/union) (into default-context outer-segment))]
@@ -80,16 +78,25 @@
                :else
                (let [[l-op & l-args :as left] l
                      [r-op & r-args] (if (nil? r) left r)
-                     new-outer (path-segment outer (assoc (meta outer-segment) :op #dbg l-op :start-transform (:end-transform (meta (peek outer)))) l-args)
-                     new-inner (path-segment inner (assoc (meta inner-segment) :op #dbg r-op :start-transform (:end-transform (meta (peek outer)))) r-args)]
-                 (recur [new-outer new-inner]
+                     end-tf-outer (:end-transform (meta (peek outer)))
+                     end-tf-inner (:end-transform (meta (peek inner)))
+                     l-opts (into {} (partition-all 2) l-args)
+                     r-opts (into {} (partition-all 2) r-args)
+                     new-outer (path-segment outer (assoc (meta outer-segment) :op l-op :start-transform end-tf-outer) l-opts)
+                     new-inner (path-segment inner (assoc (meta inner-segment) :op r-op :start-transform end-tf-inner) r-opts)]
+                 (recur [(if (:gap l-opts)
+                           (conj (pop outer) (with-meta (peek outer) (meta (peek new-outer))))
+                           new-outer)
+                         (if (:gap r-opts)
+                           (conj (pop inner) (with-meta (peek inner) (meta (peek new-inner))))
+                           new-inner)]
                         segments))))))))
 
 (defmethod path-segment ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
-            :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+  (let [{:keys [curve-radius angle]
+         :or {curve-radius (:curve-radius ctx)
+              angle (/ Math/PI 2)}} args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -107,9 +114,9 @@
 
 (defmethod path-segment ::right
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
-            :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+  (let [{:keys [curve-radius angle]
+         :or {curve-radius (:curve-radius ctx)
+              angle (/ Math/PI 2)}} args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -127,10 +134,10 @@
 
 (defmethod path-segment ::up
   [ret {:keys [fn shape gap start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle gap]
-            :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)
-                 gap gap}}] args
+  (let [{:keys [curve-radius angle gap]
+         :or {curve-radius (:curve-radius ctx)
+              angle (/ Math/PI 2)
+              gap gap}} args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -148,9 +155,9 @@
 
 (defmethod path-segment ::down
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [[& {:keys [curve-radius angle]
-            :or {curve-radius (:curve-radius ctx)
-                 angle (/ Math/PI 2)}}] args
+  (let [{:keys [curve-radius angle]
+         :or {curve-radius (:curve-radius ctx)
+              angle (/ Math/PI 2)}} args
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -167,9 +174,8 @@
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defmethod path-segment ::forward
-  [ret {:keys [fn shape start-transform gap] :as ctx} args]
-  (let [
-        [& {:keys [length model twist gap mask] :or {gap gap}}]  args
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length model twist mask]} args
         part (binding [m/*fn* fn]
                (as-> (if model
                        model
@@ -181,13 +187,27 @@
         tf (u/go-forward start-transform length)]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
+(defmethod path-segment ::backward
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length model twist mask]}  args
+        part (binding [m/*fn* fn]
+               (as-> (if model
+                       model
+                       (->> shape
+                            (m/extrude-linear {:height length :center false :twist twist})
+                            (m/translate [0 0 (- length)]))) m
+                 (if mask
+                   (m/difference m mask)
+                   m)))
+        tf (u/go-backward start-transform length)]
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
+
 (defmethod path-segment ::roll
-  [ret {:keys [start-transform] :as ctx} [& {:keys [angle] :or {angle (/ Math/PI 2)}}]]
-  (let [new-axes (u/roll start-transform angle)]
-    (conj ret (assoc ctx :end-transform new-axes))))
+  [ret _ {:keys [angle] :or {angle (/ Math/PI 2)}}]
+  (conj (pop ret) (vary-meta (peek ret) assoc :end-transform (u/roll (:end-transform (meta (peek ret))) angle))))
 
 (defmethod path-segment ::hull
-  [ret {:keys [fn]} [& {:keys [n-segments] :or {n-segments 2}}]]
+  [ret {:keys [fn]} {:keys [n-segments] :or {n-segments 2}}]
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
         new-segment (binding [m/*fn* fn]
@@ -219,6 +239,9 @@
 (defn forward [& opts]
   `(::forward ~@opts))
 
+(defn backward [& opts]
+  `(::backward ~@opts))
+
 (defn hull [& opts]
   `(::hull ~@opts))
 
@@ -244,13 +267,13 @@
   (defmodel hull-test
     {:curve-radius 20 :fn 70}
     [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-     (forward :length 10)
+     (forward :length 20 :gap true)
      [(context :shape (m/circle 10)) (context :shape (m/circle 8))]
      (forward :length 10)
-     (hull)
-     [(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-     (forward :length 10)
-     (hull)])
+     #_(hull)
+     #_[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
+     #_(forward :length 10)
+     #_(hull)])
 
   (path {:curve-radius 10 :fn 10}
         [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]

@@ -27,6 +27,9 @@
 (defn- set-meta [meta segment]
   (with-meta segment meta))
 
+(defn roll [segment angle]
+  (set-transform (u/roll (get-transform segment) angle) segment))
+
 (defn get-sub-segment [segment n]
   (-> segment meta :segments (nth n)))
 

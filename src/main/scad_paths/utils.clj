@@ -77,6 +77,15 @@
      (mat/select m :all :butlast)
      (mat/column-matrix tr))))
 
+(defn go-backward [m x]
+  (let [v  (mat/select m 2 :butlast)
+        t  (mat/select m :all 3)
+        tr (mat/sub t (mat/mmul (mat/conjoin-along 0 v 0) x))]
+    (mat/join-along
+     1
+     (mat/select m :all :butlast)
+     (mat/column-matrix tr))))
+
 (defn rotate33
   [[vx vy vz] axis a]
   [(rotation-vector vx axis a)
@@ -129,21 +138,6 @@
       [(angle-between v1 v2) (mat/normalise cross)])))
 
 (def identity-mat [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 0]])
-
-(defn ->scad-transform
-  "Make an OpenSCAD transformation function between two coordinate frames."
-  ([m] (->scad-transform identity-mat m))
-  ([m1 m2]
-   (let [translation (mat/sub (translation-vector m2) (translation-vector m1))
-         a (rotation-matrix m1)
-         b (rotation-matrix m2)
-         [angle ortho] (rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-         c (rotate33 a ortho angle)
-         [angle-2 ortho-2] (rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
-     (comp
-      (partial m/translate translation)
-      (partial m/rotatev (- angle-2) ortho-2)
-      (partial m/rotatev angle ortho)))))
 
 (defn ->inverse-scad-transform
   ([m] (->inverse-scad-transform identity-mat m))
