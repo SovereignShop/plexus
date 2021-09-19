@@ -214,6 +214,11 @@
                       (join-segments hull-segments m/hull false))]
     (conj other-forms new-segment)))
 
+(defmethod path-segment ::translate
+  [ret _ {:keys [x y z] :or {x 0 y 0 z 0}}]
+  (let [seg (sg/set-translation (peek ret) [x y z])]
+    (conj (pop ret) seg)))
+
 (defmethod path-segment ::no-op
   [ret _ _]
   ret)
@@ -250,6 +255,9 @@
 
 (defn model [& args]
   `(::model ~@args))
+
+(defn translate [& args]
+  `(::translate ~@args))
 
 (defmacro defmodel [name ctx path-spec]
   `(def ~name

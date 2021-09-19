@@ -24,6 +24,9 @@
   [segment]
   (-> segment meta :start-transform u/translation-vector))
 
+(defn set-translation [segment translation]
+  (vary-meta segment update :end-transform u/translate translation))
+
 (defn- set-meta [meta segment]
   (with-meta segment meta))
 
