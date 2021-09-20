@@ -263,31 +263,3 @@
   `(def ~name
      (binding [m/*fn* (:fn ~ctx 10)]
        (path ~ctx ~path-spec))))
-
-(defn get-start-transform [segment]
-  (-> segment meta :start-transform))
-
-(defn get-end-transform [segment]
-  (-> segment meta :end-transform))
-
-(comment
-
-  (defmodel hull-test
-    {:curve-radius 20 :fn 70}
-    [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-     (forward :length 20 :gap true)
-     [(context :shape (m/circle 10)) (context :shape (m/circle 8))]
-     (forward :length 10)
-     #_(hull)
-     #_[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-     #_(forward :length 10)
-     #_(hull)])
-
-  (path {:curve-radius 10 :fn 10}
-        [[(context :shape (m/circle 6)) (context :shape (m/circle 4))]
-         (down)
-         (left)
-         (right)
-         (forward :length 20)])
-
-  )
