@@ -19,6 +19,11 @@
   [m segment]
   (vary-meta segment assoc :start-transform m))
 
+(defn set-end-transform
+  "Set segment start rotation."
+  [m segment]
+  (vary-meta segment assoc :end-transform m))
+
 (defn get-translation
   "Get transform to end of segment."
   [segment]

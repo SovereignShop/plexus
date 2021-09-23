@@ -1,6 +1,7 @@
 (ns scad-paths.core
   (:require
    [scad-clj.scad :as s]
+   [scad-paths.transforms :as tr]
    [scad-paths.segment :as sg]
    [scad-paths.utils :as u]
    [scad-clj.model :as m]))
@@ -38,6 +39,10 @@
        :outer-model outer-section
        :inner-model inner-section})))
 
+(defn lookup-transform
+  [model name]
+  (-> model meta :connections name))
+
 (defn path
   ([path-spec]
    (path nil path-spec))
@@ -50,6 +55,7 @@
                           :end-transform u/identity-mat}]
      (loop [ret [[(with-meta (m/union) (into default-context outer-segment))]
                  [(with-meta (m/union) (into default-context inner-segment))]]
+            connection-transforms {}
             [seg & segments] path-spec]
        (let [[l r] (if (vector? seg) seg [seg])
              outer (nth ret 0)
@@ -57,22 +63,27 @@
              inner (nth ret 1)
              inner-segment (peek inner)]
          (cond (nil? l)
-               (->model ret path-spec)
+               (vary-meta (->model ret path-spec)
+                          assoc
+                          :connections (assoc connection-transforms
+                                              :outer-end (-> outer peek meta :end-transform)
+                                              :inner-end (-> inner peek meta :end-transform)))
 
                (= l :segment)
-               (recur ret (into (or (-> r meta :path-spec) r) segments))
-
+               (recur ret connection-transforms (into (or (-> r meta :path-spec) r) segments))
 
                (= l :branch)
                (let [model (path (meta outer-segment) (meta inner-segment) (:path-spec (meta r) r))
                      [branch-outer branch-inner] (-> model meta :segments)]
                  (recur [(conj (pop outer) (vary-meta outer-segment assoc :branch branch-outer))
                          (conj (pop inner) (vary-meta inner-segment assoc :branch branch-inner))]
+                        (merge connection-transforms (:connections (meta model)))
                         segments))
 
                (= (first l) ::context)
                (recur [(conj (pop outer) (vary-meta outer-segment into (partition-all 2) (next l)))
                        (conj (pop inner) (vary-meta inner-segment into (partition-all 2) (next r)))]
+                      connection-transforms
                       segments)
 
                :else
@@ -90,6 +101,9 @@
                          (if (:gap r-opts)
                            (conj (pop inner) (with-meta (peek inner) (meta (peek new-inner))))
                            new-inner)]
+                        (cond-> connection-transforms
+                          (:name l-opts) (assoc (:name l-opts) (-> new-outer peek meta :end-transform))
+                          (:name r-opts) (assoc (:name r-opts) (-> new-inner peek meta :end-transform)))
                         segments))))))))
 
 (defmethod path-segment ::left
@@ -219,6 +233,16 @@
   (let [seg (sg/set-translation (peek ret) [x y z])]
     (conj (pop ret) seg)))
 
+(defmethod path-segment ::rotate
+  [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
+  (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
+    (conj (pop ret) seg)))
+
+(defmethod path-segment ::transform
+  [ret _ {:keys [transform] :or {transform u/identity-mat}}]
+  (let [seg (vary-meta (peek ret) assoc :end-transform transform)]
+    (conj (pop ret) seg)))
+
 (defmethod path-segment ::no-op
   [ret _ _]
   ret)
@@ -258,6 +282,12 @@
 
 (defn translate [& args]
   `(::translate ~@args))
+
+(defn rotate [& args]
+  `(::rotate ~@args))
+
+(defn transform [& args]
+  `(::transform ~@args))
 
 (defmacro defmodel [name ctx path-spec]
   `(def ~name
