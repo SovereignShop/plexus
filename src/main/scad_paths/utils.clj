@@ -68,14 +68,20 @@
 (defn roll [m a]
   (update-rotation m roll* a))
 
-(defn go-forward [m x]
-  (let [v  (mat/select m 2 :butlast)
-        t  (mat/select m :all 3)
-        tr (mat/add t (mat/mmul (mat/conjoin-along 0 v 0) x))]
-    (mat/join-along
-     1
-     (mat/select m :all :butlast)
-     (mat/column-matrix tr))))
+(defn go-forward
+  ([m x]
+   (go-forward m x :z))
+  ([m x axis]
+   (let [v  (case axis
+              :x (mat/select m 0 :butlast)
+              :y (mat/select m 1 :butlast)
+              :z (mat/select m 2 :butlast))
+         t  (mat/select m :all 3)
+         tr (mat/add t (mat/mmul (mat/conjoin-along 0 v 0) x))]
+     (mat/join-along
+      1
+      (mat/select m :all :butlast)
+      (mat/column-matrix tr)))))
 
 (defn go-backward [m x]
   (let [v  (mat/select m 2 :butlast)

@@ -114,6 +114,7 @@
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
+                    (m/rotatec [0 0 Math/PI])
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
@@ -155,6 +156,7 @@
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
+                    (m/rotatec [0 0 (- (/ Math/PI 2))])
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
@@ -175,6 +177,7 @@
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
+                    (m/rotatec [0 0 (/ Math/PI 2)])
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
@@ -229,9 +232,12 @@
     (conj other-forms new-segment)))
 
 (defmethod path-segment ::translate
-  [ret _ {:keys [x y z] :or {x 0 y 0 z 0}}]
-  (let [seg (sg/set-translation (peek ret) [x y z])]
-    (conj (pop ret) seg)))
+  [ret {:keys [start-transform]} {:keys [x y z]}]
+  (let [tf (cond-> start-transform
+             x (u/go-forward x :x)
+             y (u/go-forward y :y)
+             z (u/go-forward z :z))]
+    (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
 (defmethod path-segment ::rotate
   [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
@@ -246,6 +252,19 @@
 (defmethod path-segment ::no-op
   [ret _ _]
   ret)
+
+(defmethod path-segment ::spin
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [angle]
+         :or {angle (/ Math/PI 2)}} args
+        degrees (* angle 57.29578)
+        part (binding [m/*fn* fn]
+               (->> (m/difference
+                     shape
+                     (->> (m/square 1000 1000)
+                          (m/translate [-500 0])))
+                    (m/extrude-rotate {:angle degrees})))]
+    (conj ret (with-meta part (assoc ctx :end-transform start-transform)))))
 
 (defn no-op [& opts]
   `(::no-op ~@opts))
@@ -289,7 +308,11 @@
 (defn transform [& args]
   `(::transform ~@args))
 
+(defn spin [& args]
+  `(::spin ~@args))
+
 (defmacro defmodel [name ctx path-spec]
-  `(def ~name
-     (binding [m/*fn* (:fn ~ctx 10)]
-       (path ~ctx ~path-spec))))
+  `(do (def ~name
+         (binding [m/*fn* (:fn ~ctx 10)]
+           (path ~ctx ~path-spec)))
+       ~name))

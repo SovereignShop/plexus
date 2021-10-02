@@ -1,7 +1,6 @@
 (ns scad-paths.transforms
   (:require
-   [clojure.core.matrix :as mat]
-   [scad-clj.model :as m]))
+   [clojure.core.matrix :as mat]))
 
 (defrecord Transform [direction pos])
 
