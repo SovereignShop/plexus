@@ -8,8 +8,8 @@
 
 (defmulti path-segment (fn [_ ctx _] (:op ctx)))
 
-(defn join-segments
-  ([segments] (join-segments segments m/union true))
+(defn transform-segments
+  ([segments] (transform-segments segments m/union true))
   ([segments join-op join-branch?]
    (let [first-segment-data (meta (first segments))
          start-tf (:start-transform first-segment-data)
@@ -27,79 +27,80 @@
            (recur (meta seg)
                   segs
                   (cond-> (conj ret (sg/project seg))
-                    (and branch join-branch?) (conj (join-segments branch join-op join-branch?))))))))))
+                    (and branch join-branch?) (conj (transform-segments branch join-op join-branch?))))))))))
 
-(defn ->model [segments path-spec]
-  (let [outer-section (join-segments (segments 0))
-        inner-section (if-let [seg (get segments 1)]
-                        (join-segments seg)
-                        (m/union))]
+(defn ->model [columns path-spec]
+  (let [segments (->> (mapcat #(transform-segments % identity true) (vals columns))
+                      (group-by (juxt (comp :order meta) (comp :mask? meta)))
+                      (sort-by key))]
     (with-meta
-      (m/difference outer-section inner-section)
+      (reduce (fn [ret [[_ mask?] models]]
+                (if mask?
+                  (m/difference ret (m/union models))
+                  (m/union ret (m/union models))))
+              (m/union)
+              segments)
       {:segments segments
-       :path-spec path-spec
-       :start-transform (-> outer-section meta :start-transform)
-       :outer-model outer-section
-       :inner-model inner-section})))
+       :path-spec path-spec})))
 
 (defn lookup-transform
   [model name]
   (-> model meta :connections name))
 
 (defn path
-  ([forms]
-   (path [{}] forms))
-  ([contexts path-forms]
+  ([path-forms]
    (let [default-context {:curve-radius 7
                           :fn 10
+                          :order 0
+                          :mask? false
                           :start-transform u/identity-mat
-                          :end-transform u/identity-mat}]
-     (loop [segments (if (vector? contexts)
-                       (into {}
-                             (for [[i ctx] (map-indexed list contexts)]
-                               [i [(with-meta (m/union) (into default-context ctx))]]))
-                       contexts)
-            connection-transforms {}
-            [form & forms] path-forms]
-       (let [form (if (vector? form) form [form])]
-         (cond (nil? (first form))
-               (->model segments path-forms)
+                          :end-transform u/identity-mat}
+         default-segments {0 [(with-meta (m/union) default-context)]
+                           1 [(with-meta (m/union) (assoc default-context :order 1 :mask? true))]}]
+     (path default-segments path-forms)))
+  ([contexts path-forms]
+   (loop [segments contexts
+          connection-transforms {}
+          [form & forms] path-forms]
+     (let [form (if (vector? form) form [form])]
+       (cond (nil? (first form))
+             (->model segments path-forms)
 
-               (= (first form) :segment)
-               (recur segments connection-transforms (into (or (-> (second form) meta :path-spec) (second form)) forms))
+             (= (first form) :segment)
+             (recur segments connection-transforms (into (or (-> (second form) meta :path-spec) (second form)) forms))
 
-               (= (first form) :branch)
-               (let [r (second form)
-                     model (path segments (:path-spec (meta r) r))
-                     branch-segments (-> model meta :segments)]
-                 (recur (merge-with (fn [ctx branch]
-                                      (conj (pop ctx) (vary-meta (peek ctx) assoc :branch branch)))
-                                    segments
-                                    branch-segments)
-                        (merge connection-transforms (:connections (meta model)))
-                        forms))
+             (= (first form) :branch)
+             (let [r (second form)
+                   model (path segments (:path-spec (meta r) r))
+                   branch-segments (-> model meta :segments)]
+               (recur (merge-with (fn [ctx branch]
+                                    (conj (pop ctx) (vary-meta (peek ctx) assoc :branch branch)))
+                                  segments
+                                  branch-segments)
+                      (merge connection-transforms (:connections (meta model)))
+                      forms))
 
-               :else
-               (let [segments (if (< (count segments) (count form))
-                                (assoc segments (count segments) (get segments (dec (count segments))))
-                                segments)
-                     segments
-                     (into segments
-                           (for [[idx column] segments]
-                             (let [clause (if (contains? form idx)
-                                            (nth form idx)
-                                            (last form))
-                                   [op & args] clause
-                                   opts (into {} (partition-all 2) args)
-                                   last-segment (peek column)
-                                   end-tf (:end-transform (meta last-segment))
-                                   new-column (path-segment column (assoc (meta last-segment) :op op :start-transform end-tf) opts)]
-                               [idx (if (:gap opts)
-                                      (conj (pop column) (with-meta (peek column) (meta (peek new-column))))
-                                      new-column)])))]
-                 (recur segments
-                        connection-transforms
-                        forms))))))))
+             :else
+             (let [segments (if (< (count segments) (count form))
+                              (assoc segments (count segments) (get segments (dec (count segments))))
+                              segments)
+                   segments
+                   (into segments
+                         (for [[idx column] segments]
+                           (let [clause (if (contains? form idx)
+                                          (nth form idx)
+                                          (last form))
+                                 [op & args] clause
+                                 opts (into {} (partition-all 2) args)
+                                 last-segment (peek column)
+                                 end-tf (:end-transform (meta last-segment))
+                                 new-column (path-segment column (assoc (meta last-segment) :op op :start-transform end-tf) opts)]
+                             [idx (if (:gap opts)
+                                    (conj (pop column) (with-meta (peek column) (meta (peek new-column))))
+                                    new-column)])))]
+               (recur segments
+                      connection-transforms
+                      forms)))))))
 
 (defmethod path-segment ::context
   [ret _ args]
@@ -227,7 +228,7 @@
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
         new-segment (binding [m/*fn* fn]
-                      (join-segments hull-segments m/hull false))]
+                      (transform-segments hull-segments m/hull false))]
     (conj other-forms new-segment)))
 
 (defmethod path-segment ::translate
@@ -313,8 +314,7 @@
 (defn spin [& args]
   `(::spin ~@args))
 
-(defmacro defmodel [name ctx path-spec]
+(defmacro defmodel [name path-spec]
   `(do (def ~name
-         (binding [m/*fn* (:fn ~ctx 10)]
-           (path [~ctx] ~path-spec)))
+         (path ~path-spec))
        ~name))
