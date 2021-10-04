@@ -111,19 +111,25 @@
                         [name (conj (pop model) (vary-meta (peek model) assoc :branch (-> m meta :models name)))]))
                  models))))
 
-(defn update-models [{:keys [models] :as state} {:keys [to] :as args} f]
+(defn update-models [{:keys [models] :as state} {:keys [to gap] :as args} f]
   (assoc state
          :models
          (reduce
           conj
           models
           (map (fn [[name model]]
-                 [name (f model
-                          (cond-> (assoc (meta (peek model))
-                                         :start-transform
-                                         (:end-transform (meta (peek model))))
-                            (:order args) (assoc :order (:order args)))
-                          (dissoc args :to))])
+                 (let [m (f model
+                            (cond-> (assoc (meta (peek model))
+                                           :start-transform
+                                           (:end-transform (meta (peek model))))
+                              (:order args) (assoc :order (:order args)))
+                            (dissoc args :to :gap))]
+                   [name (if gap
+                           (conj (-> m pop pop) (vary-meta (-> m pop peek)
+                                                           assoc
+                                                           :end-transform
+                                                           (:end-transform (meta (peek m)))))
+                           m)]))
                (if to (select-keys models to) models)))))
 
 (defmacro def-segment-handler [key & func]
