@@ -6,7 +6,7 @@
    [scad-paths.utils :as u]
    [scad-clj.model :as m]))
 
-(defmulti path-segment (fn [_ ctx _] (:op ctx)))
+(defmulti path-form (fn [_ ctx _] (:op ctx)))
 
 (defn transform-segments
   ([segments] (transform-segments segments m/union true))
@@ -47,66 +47,67 @@
   [model name]
   (-> model meta :connections name))
 
+(def default-model
+  {:curve-radius 7
+   :fn 10
+   :order 0
+   :mask? false
+   :name :default
+   :start-transform u/identity-mat
+   :end-transform u/identity-mat})
+
 (defn path
-  ([path-forms]
-   (let [default-context {:curve-radius 7
-                          :fn 10
-                          :order 0
-                          :mask? false
-                          :start-transform u/identity-mat
-                          :end-transform u/identity-mat}
-         default-segments {0 [(with-meta (m/union) default-context)]
-                           1 [(with-meta (m/union) (assoc default-context :order 1 :mask? true))]}]
-     (path default-segments path-forms)))
-  ([contexts path-forms]
-   (loop [segments contexts
-          connection-transforms {}
+  ([path-forms] (path {:models {}
+                       :env {}
+                       :transforms {}}
+                      path-forms))
+  ([state path-forms]
+   (loop [{:keys [models] :as state} state
           [form & forms] path-forms]
-     (let [form (if (vector? form) form [form])]
-       (cond (nil? (first form))
-             (->model segments path-forms)
+     (cond (nil? form)
+           (->model models path-forms)
 
-             (= (first form) :segment)
-             (recur segments connection-transforms (into (or (-> (second form) meta :path-spec) (second form)) forms))
+           :else
+           (let [models
+                 (into models
+                       (for [[idx column] models]
+                         (let [clause (if (contains? form idx)
+                                        (nth form idx)
+                                        (last form))
+                               [op & args] clause
+                               opts (into {} (partition-all 2) args)
+                               last-segment (peek column)
+                               end-tf (:end-transform (meta last-segment))
+                               new-column (path-form column
+                                                     (assoc (meta last-segment) :op op :start-transform end-tf)
+                                                     opts)]
+                           [idx (if (:gap opts)
+                                  (conj (pop column) (with-meta (peek column) (meta (peek new-column))))
+                                  new-column)])))]
+             (recur models
+                    connection-transforms
+                    forms))))))
 
-             (= (first form) :branch)
-             (let [r (second form)
-                   model (path segments (:path-spec (meta r) r))
-                   branch-segments (-> model meta :segments)]
-               (recur (merge-with (fn [ctx branch]
-                                    (conj (pop ctx) (vary-meta (peek ctx) assoc :branch branch)))
-                                  segments
-                                  branch-segments)
-                      (merge connection-transforms (:connections (meta model)))
-                      forms))
-
-             :else
-             (let [segments (if (< (count segments) (count form))
-                              (assoc segments (count segments) (get segments (dec (count segments))))
-                              segments)
-                   segments
-                   (into segments
-                         (for [[idx column] segments]
-                           (let [clause (if (contains? form idx)
-                                          (nth form idx)
-                                          (last form))
-                                 [op & args] clause
-                                 opts (into {} (partition-all 2) args)
-                                 last-segment (peek column)
-                                 end-tf (:end-transform (meta last-segment))
-                                 new-column (path-segment column (assoc (meta last-segment) :op op :start-transform end-tf) opts)]
-                             [idx (if (:gap opts)
-                                    (conj (pop column) (with-meta (peek column) (meta (peek new-column))))
-                                    new-column)])))]
-               (recur segments
-                      connection-transforms
-                      forms)))))))
-
-(defmethod path-segment ::context
+(defmethod path-form ::context
   [ret _ args]
   (conj (pop ret) (vary-meta (peek ret) into args)))
 
-(defmethod path-segment ::left
+(defmethod path-form ::model
+  [ret args]
+  (let [model (into default-model args)]
+    (update ret :models assoc (:name model) model)))
+
+(defmethod path-form ::branch
+  [{:keys [models] :as state} args]
+  (let [m (path state args)]
+    (assoc models
+           :models
+           (into {}
+                 (map (fn [[name model]]
+                        [name (conj (pop model) (assoc (peek model) :branch (-> m :models name)))]))
+                 models))))
+
+(defmethod path-form ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -127,7 +128,7 @@
                (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::right
+(defmethod path-form ::right
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -147,7 +148,7 @@
                (u/yaw (- angle r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::up
+(defmethod path-form ::up
   [ret {:keys [fn shape gap start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle gap]
          :or {curve-radius (:curve-radius ctx)
@@ -169,7 +170,7 @@
                (u/pitch (- angle r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::down
+(defmethod path-form ::down
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -190,7 +191,7 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::forward
+(defmethod path-form ::forward
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length model twist mask]} args
         part (binding [m/*fn* fn]
@@ -204,7 +205,7 @@
         tf (u/go-forward start-transform length)]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::backward
+(defmethod path-form ::backward
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length model twist mask]}  args
         part (binding [m/*fn* fn]
@@ -219,11 +220,11 @@
         tf (u/go-backward start-transform length)]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-segment ::roll
+(defmethod path-form ::roll
   [ret _ {:keys [angle] :or {angle (/ Math/PI 2)}}]
   (conj (pop ret) (vary-meta (peek ret) assoc :end-transform (u/roll (:end-transform (meta (peek ret))) angle))))
 
-(defmethod path-segment ::hull
+(defmethod path-form ::hull
   [ret {:keys [fn]} {:keys [n-segments] :or {n-segments 2}}]
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
@@ -231,7 +232,7 @@
                       (transform-segments hull-segments m/hull false))]
     (conj other-forms new-segment)))
 
-(defmethod path-segment ::translate
+(defmethod path-form ::translate
   [ret {:keys [start-transform]} {:keys [x y z]}]
   (let [tf (cond-> start-transform
              x (u/go-forward x :x)
@@ -239,21 +240,21 @@
              z (u/go-forward z :z))]
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
-(defmethod path-segment ::rotate
+(defmethod path-form ::rotate
   [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
 
-(defmethod path-segment ::transform
+(defmethod path-form ::transform
   [ret _ {:keys [transform] :or {transform u/identity-mat}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform transform)]
     (conj (pop ret) seg)))
 
-(defmethod path-segment ::no-op
+(defmethod path-form ::no-op
   [ret _ _]
   ret)
 
-(defmethod path-segment ::spin
+(defmethod path-form ::spin
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [angle]
          :or {angle (/ Math/PI 2)}} args
@@ -314,7 +315,10 @@
 (defn spin [& args]
   `(::spin ~@args))
 
-(defmacro defmodel [name path-spec]
-  `(do (def ~name
-         (path ~path-spec))
-       ~name))
+(defmacro defmodel [name & args]
+  (let [path-spec (last args)
+        opts (into {} (partition-all 2) (butlast args))]
+    `(do (binding [m/*fn* (get ~opts :fn 10)]
+           (def ~name
+             (path ~path-spec)))
+         ~name)))
