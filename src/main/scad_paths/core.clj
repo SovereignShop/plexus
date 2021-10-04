@@ -79,10 +79,11 @@
            (->model models path-forms)
 
            (sequential? form)
-           (let [args (parse-args form)
-                 new-state (path-form state args)]
-             (recur new-state
-                    forms))))))
+           (if (= (first form) ::segment)
+             (recur state (concat (or (-> form second meta :path-spec) (next form)) forms))
+             (let [args (parse-args form)
+                   new-state (path-form state args)]
+               (recur new-state forms)))))))
 
 (defmethod path-form ::context
   [ret _ args]
@@ -336,6 +337,9 @@
 
 (defn branch [& args]
   `(::branch ~@args))
+
+(defn segment [& args]
+  `(::segment ~@args))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
