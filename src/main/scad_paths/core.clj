@@ -35,12 +35,13 @@
                       (sort-by key))]
     (with-meta
       (reduce (fn [ret [[_ mask?] models]]
-               #dbg (if mask?
+                (if mask?
                   (m/difference ret (m/union models) )
                   (m/union ret (m/union models))))
               (m/union)
-              #dbg segments)
+              segments)
       {:segments segments
+       :models models
        :path-spec path-spec})))
 
 (defn lookup-transform
@@ -56,6 +57,16 @@
    :start-transform u/identity-mat
    :end-transform u/identity-mat})
 
+(defn parse-args [form]
+  (loop [[arg & args] (next form)
+         kvs (transient {:op (first form)})]
+    (if (nil? arg)
+      (persistent! kvs)
+      (if (keyword? arg)
+        (recur (next args)
+               (assoc! kvs arg (first args)))
+        (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
+
 (defn path
   ([path-forms] (path {:models {}
                        :env {}
@@ -68,7 +79,8 @@
            (->model models path-forms)
 
            (sequential? form)
-           (let [new-state (path-form state (into {:op (first form)} (partition-all 2) (next form)))]
+           (let [args (parse-args form)
+                 new-state (path-form state args)]
              (recur new-state
                     forms))))))
 
@@ -83,15 +95,35 @@
 
 (defmethod path-form ::branch
   [{:keys [models] :as state} args]
-  (let [m (path state args)]
+  (let [m (path state (::list args))]
     (assoc models
            :models
            (into {}
                  (map (fn [[name model]]
-                        [name (conj (pop model) (assoc (peek model) :branch (-> m :models name)))]))
+                        [name (conj (pop model) (vary-meta (peek model) assoc :branch (-> m meta :models name)))]))
                  models))))
 
-#_(defmethod path-form ::left
+(defn update-models [{:keys [models] :as state} {:keys [to] :as args} f]
+  (assoc state
+         :models
+         (reduce
+          conj
+          models
+          (map (fn [[name model]]
+                 [name (f model
+                          (cond-> (assoc (meta (peek model))
+                                         :start-transform
+                                         (:end-transform (meta (peek model))))
+                            (:order args) (assoc :order (:order args)))
+                          (dissoc args :to))])
+               (if to (select-keys models to) models)))))
+
+(defmacro def-segment-handler [key & func]
+  `(defmethod path-form ~key
+     [state# args#]
+     (update-models state# args# (fn ~@func))))
+
+(def-segment-handler ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -112,7 +144,7 @@
                (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-#_(defmethod path-form ::right
+(def-segment-handler ::right
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -132,7 +164,7 @@
                (u/yaw (- angle r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-#_(defmethod path-form ::up
+(def-segment-handler ::up
   [ret {:keys [fn shape gap start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle gap]
          :or {curve-radius (:curve-radius ctx)
@@ -154,7 +186,7 @@
                (u/pitch (- angle r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-#_(defmethod path-form ::down
+(def-segment-handler ::down
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle]
          :or {curve-radius (:curve-radius ctx)
@@ -175,53 +207,40 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defmethod path-form ::forward
-  [{:keys [models] :as state} {:keys [to] :as args}]
-  (let [f (fn [ret {:keys [fn shape start-transform] :as ctx} args]
-            (let [{:keys [length model twist mask]} args
-                  part (binding [m/*fn* fn]
-                         (as-> (if model
-                                 model
-                                 (->> shape
-                                      (m/extrude-linear {:height length :center false :twist twist}))) m
-                           (if mask
-                             (m/difference m mask)
-                             m)))
-                  tf (u/go-forward start-transform length)]
-              (conj ret (with-meta part (assoc ctx :end-transform tf)))))]
-    (assoc state
-           :models
-           (reduce
-            conj
-            models
-            (map (fn [[name model]]
-                   [name (f model (cond-> (assoc (meta (peek model))
-                                                 :start-transform
-                                                 (:end-transform (meta (peek model))))
-                                    (:order args) (assoc :order (:order args)))
-                            (dissoc args :to))])
-                 (if to (select-keys models to) models))))))
+(def-segment-handler ::forward
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length model twist mask]} args
+        part (binding [m/*fn* fn]
+               (as-> (if model
+                       model
+                       (->> shape
+                            (m/extrude-linear {:height length :center false :twist twist}))) m
+                 (if mask
+                   (m/difference m mask)
+                   m)))
+        tf (u/go-forward start-transform length)]
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-#_(defmethod path-form ::backward
-    [ret {:keys [fn shape start-transform] :as ctx} args]
-    (let [{:keys [length model twist mask]}  args
-          part (binding [m/*fn* fn]
-                 (as-> (if model
-                         model
-                         (->> shape
-                              (m/extrude-linear {:height length :center false :twist twist})
-                              (m/translate [0 0 (- length)]))) m
-                   (if mask
-                     (m/difference m mask)
-                     m)))
-          tf (u/go-backward start-transform length)]
-      (conj ret (with-meta part (assoc ctx :end-transform tf)))))
+(def-segment-handler ::backward
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length model twist mask]}  args
+        part (binding [m/*fn* fn]
+               (as-> (if model
+                       model
+                       (->> shape
+                            (m/extrude-linear {:height length :center false :twist twist})
+                            (m/translate [0 0 (- length)]))) m
+                 (if mask
+                   (m/difference m mask)
+                   m)))
+        tf (u/go-backward start-transform length)]
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-#_(defmethod path-form ::roll
+(def-segment-handler ::roll
   [ret _ {:keys [angle] :or {angle (/ Math/PI 2)}}]
   (conj (pop ret) (vary-meta (peek ret) assoc :end-transform (u/roll (:end-transform (meta (peek ret))) angle))))
 
-#_(defmethod path-form ::hull
+(def-segment-handler ::hull
   [ret {:keys [fn]} {:keys [n-segments] :or {n-segments 2}}]
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
@@ -229,7 +248,7 @@
                       (transform-segments hull-segments m/hull false))]
     (conj other-forms new-segment)))
 
-#_(defmethod path-form ::translate
+(def-segment-handler ::translate
   [ret {:keys [start-transform]} {:keys [x y z]}]
   (let [tf (cond-> start-transform
              x (u/go-forward x :x)
@@ -237,21 +256,21 @@
              z (u/go-forward z :z))]
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
-#_(defmethod path-form ::rotate
+(def-segment-handler ::rotate
   [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
 
-#_(defmethod path-form ::transform
+(def-segment-handler ::transform
   [ret _ {:keys [transform] :or {transform u/identity-mat}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform transform)]
     (conj (pop ret) seg)))
 
-#_(defmethod path-form ::no-op
+(def-segment-handler ::no-op
   [ret _ _]
   ret)
 
-#_(defmethod path-form ::spin
+(def-segment-handler ::spin
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [angle]
          :or {angle (/ Math/PI 2)}} args
@@ -314,6 +333,9 @@
 
 (defn model [& args]
   `(::model ~@args))
+
+(defn branch [& args]
+  `(::branch ~@args))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
