@@ -9,10 +9,17 @@
       [(model :shape (m/circle 6) :mask? false :name :body)
        (model :shape (m/circle 4) :mask? true :name :mask)
 
-       (left :angle (/ Math/PI 2) :to [:body]) (left :angle (/ Math/PI 2) :to [:mask])
-       (right :angle (/ Math/PI 2) :to [:body]) (right :angle (/ Math/PI 2) :to [:mask])
-       (forward :length 10 :to [:body]) (forward :length 10 :to [:mask])
-       (up :to [:body]) (up :to [:mask])])
+       (left :angle (/ Math/PI 2) :to [:body])
+       (left :angle (/ Math/PI 2) :to [:mask])
+
+       (right :angle (/ Math/PI 2) :to [:body])
+       (right :angle (/ Math/PI 2) :to [:mask])
+
+       (forward :length 10 :to [:body])
+       (forward :length 10 :to [:mask])
+
+       (up :to [:body])
+       (up :to [:mask])])
      (s/write-scad)
      (spit "test.scad"))
 
@@ -20,16 +27,29 @@
 
 (->> (path [(model :shape (m/circle 6) :mask? false :name :body)
             (model :shape (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 20 :fn 70)
+            (set :curve-radius 20 :fn 70 :to [:body :mask])
+
+            (left :angle (/ Math/PI 2) :to [:body :mask])
+            (right :angle (/ Math/PI 2) :to [:body :mask])
+            (forward :length 10 :to [:body :mask])
+            (up :to [:body :mask])
+            (forward :length 20 :to [:body :mask])])
+     (s/write-scad)
+     (spit "test.scad"))
+
+;; ... Or equivalently:
+
+(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
+            (model :shape (m/circle 4) :mask? true :name :mask)
+            (set :curve-radius 20 :fn 70 :to [:body :mask])
 
             (left :angle (/ Math/PI 2))
             (right :angle (/ Math/PI 2))
             (forward :length 10)
-            (up)
+            (up :to [:body :mask])
             (forward :length 20)])
      (s/write-scad)
      (spit "test.scad"))
-
 
 ;; Hulls
 
@@ -56,15 +76,14 @@
 
 ;; Branching
 
-(binding [m/*fn* 40]
-  (->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-              (model :shape (m/circle 4) :mask? true :name :mask)
-              (set :curve-radius 10 :fn 70)
+(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
+            (model :shape (m/circle 4) :mask? true :name :mask)
+            (set :curve-radius 10 :fn 70)
 
-              (branch (left) (right) (forward :length 20))
-              (branch (right) (left) (forward :length 20))])
-       (s/write-scad)
-       (spit "test.scad")))
+            (branch (left) (right) (forward :length 20))
+            (branch (right) (left) (forward :length 20))])
+     (s/write-scad)
+     (spit "test.scad"))
 
 ;; Gaps
 
