@@ -8,6 +8,7 @@
 (->> (path
       [(model :shape (m/circle 6) :mask? false :name :body)
        (model :shape (m/circle 4) :mask? true :name :mask)
+       (set :curve-radius 20 :fn 70 :to [:body]) (set :curve-radius 20 :fn 70 :to [:mask])
 
        (left :angle (/ Math/PI 2) :to [:body])
        (left :angle (/ Math/PI 2) :to [:mask])
