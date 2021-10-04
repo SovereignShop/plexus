@@ -67,6 +67,11 @@
                (assoc! kvs arg (first args)))
         (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
 
+(defn normalize-segment [segment]
+  (if (sequential? (ffirst segment))
+    (first segment)
+    segment))
+
 (defn path
   ([path-forms] (path {:models {}
                        :env {}
@@ -80,19 +85,21 @@
 
            (sequential? form)
            (if (= (first form) ::segment)
-             (recur state (concat (or (-> form second meta :path-spec) (next form)) forms))
+             (recur state (concat (or (-> form second meta :path-spec) (normalize-segment (next form))) forms))
              (let [args (parse-args form)
                    new-state (path-form state args)]
                (recur new-state forms)))))))
 
-(defmethod path-form ::context
-  [ret _ args]
-  (conj (pop ret) (vary-meta (peek ret) into args)))
-
 (defmethod path-form ::model
   [ret args]
-  (let [model (into default-model args)]
-    (update ret :models assoc (:name model) [(with-meta (m/union) model)])))
+  (let [model (into default-model args)
+        model-name (:name model)
+        existing-model (-> ret :models model-name)]
+    (if existing-model
+      (update ret :models assoc (:name model)
+              (conj (pop existing-model)
+                    (vary-meta (peek existing-model) merge args)))
+      (update ret :models assoc (:name model) [(with-meta (m/union) model)]))))
 
 (defmethod path-form ::branch
   [{:keys [models] :as state} args]
@@ -123,6 +130,10 @@
   `(defmethod path-form ~key
      [state# args#]
      (update-models state# args# (fn ~@func))))
+
+(def-segment-handler ::set
+  [ret _ args]
+  (conj (pop ret) (vary-meta (peek ret) merge args)))
 
 (def-segment-handler ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
@@ -311,12 +322,6 @@
 (defn hull [& opts]
   `(::hull ~@opts))
 
-(defn context [& args]
-  `(::context ~@args))
-
-(defn ctx [& args]
-  `(::context ~@args))
-
 (defn model [& args]
   `(::model ~@args))
 
@@ -334,6 +339,9 @@
 
 (defn model [& args]
   `(::model ~@args))
+
+(defn set [& args]
+  `(::set ~@args))
 
 (defn branch [& args]
   `(::branch ~@args))
