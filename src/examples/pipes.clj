@@ -68,10 +68,7 @@
 
 ;; Gaps
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-            #_(model :shape (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 20 :fn 70)
-
+(->> (path [(model :shape (m/circle 6) :mask? false :name :body :curve-radius 10 :fn 70)
             (left :angle (/ Math/PI 2) :gap true)
             (right :angle (/ Math/PI 2))
             (left :gap true)
