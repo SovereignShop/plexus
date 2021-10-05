@@ -3,7 +3,7 @@
    [scad-clj.scad :as s]
    [scad-clj.model :as m]
    [scad-paths.core
-    :refer [model left right forward up down hull path set branch]]))
+    :refer [model left right forward up down hull path set branch arc defmodel]]))
 
 (->> (path
       [(model :shape (m/circle 6) :mask? false :name :body)
@@ -95,5 +95,27 @@
             (right)
             (left :gap true)
             (right)])
+     (s/write-scad)
+     (spit "test.scad"))
+
+;; Arcs
+
+
+;; Arcs defined by providing the straight-line distance between the start-point
+;; and end-point of the arc, along with the radius.
+;;
+;; In this example, the distance between Z-intersection points will be 20.
+;; You can think of it as a two-point circle.
+
+(defmodel arc-torus
+  (model :shape (m/circle 2) :fn 50)
+  (arc :side-length 20 :curve-radius 20)
+  (arc :side-length 20 :curve-radius 20)
+  (arc :side-length 20 :curve-radius 20)
+  (arc :side-length 20 :curve-radius 20)
+  (arc :side-length 20 :curve-radius 20)
+  (arc :side-length 20 :curve-radius 20))
+
+(->> arc-torus
      (s/write-scad)
      (spit "test.scad"))
