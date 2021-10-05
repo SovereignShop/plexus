@@ -1,8 +1,10 @@
 (ns scad-paths.core
   (:require
+   [clojure.walk :refer [postwalk]]
    [scad-clj.scad :as s]
    [scad-paths.transforms :as tr]
    [scad-paths.segment :as sg]
+   [scad-paths.triangles :as triangles]
    [scad-paths.utils :as u]
    [scad-clj.model :as m]))
 
@@ -92,14 +94,18 @@
 
 (defmethod path-form ::model
   [ret args]
-  (let [model (into default-model args)
+  (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
+                     (meta (peek m)))
+        model (into (or last-model default-model) args)
         model-name (:name model)
         existing-model (-> ret :models model-name)]
     (if existing-model
       (update ret :models assoc (:name model)
               (conj (pop existing-model)
                     (vary-meta (peek existing-model) merge args)))
-      (update ret :models assoc (:name model) [(with-meta (m/union) model)]))))
+      (-> ret
+          (update :models assoc model-name [(with-meta (m/union) model)])
+          (assoc :last-model model-name)))))
 
 (defmethod path-form ::branch
   [{:keys [models] :as state} args]
@@ -225,10 +231,21 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
+(defn replace-fn [n x]
+  (if (and (map? x) (:fn x))
+    (assoc x :fn n)
+    x))
+
+(defn new-fn [n model]
+  (postwalk (partial replace-fn n) model))
+
 (def-segment-handler ::forward
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length model twist mask]} args
-        part (binding [m/*fn* fn]
+        shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
+                (new-fn (:fn args) shape)
+                shape)
+        part (m/with-fn fn
                (as-> (if model
                        model
                        (->> shape
@@ -284,10 +301,6 @@
   (let [seg (vary-meta (peek ret) assoc :end-transform transform)]
     (conj (pop ret) seg)))
 
-(def-segment-handler ::no-op
-  [ret _ _]
-  ret)
-
 (def-segment-handler ::spin
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [angle]
@@ -301,8 +314,25 @@
                     (m/extrude-rotate {:angle degrees})))]
     (conj ret (with-meta part (assoc ctx :end-transform start-transform)))))
 
-(defn no-op [& opts]
-  `(::no-op ~@opts))
+(def-segment-handler ::arc
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [curve-radius side-length]
+         :or {curve-radius (:curve-radius ctx)
+              side-length (/ Math/PI 2)}} args
+        angle (triangles/abc->A side-length curve-radius curve-radius)
+        degrees (* angle 57.29578)
+        r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
+        part (binding [m/*fn* fn]
+               (->> shape
+                    (m/translate [curve-radius 0 0])
+                    (m/extrude-rotate {:angle degrees})
+                    (m/translate [(- curve-radius) 0 0])
+                    (m/rotatec [(/ Math/PI 2) r 0])))
+        d (u/bAc->a curve-radius angle curve-radius)
+        tf (-> start-transform
+               (u/go-forward side-length)
+               (u/yaw (- (* 2 r))))]
+    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defn left [& opts]
   `(::left ~@opts))
@@ -315,6 +345,9 @@
 
 (defn down [& opts]
   `(::down ~@opts))
+
+(defn arc [& opts]
+  `(::arc ~@opts))
 
 (defn roll [& opts]
   `(::roll ~@opts))
@@ -342,9 +375,6 @@
 
 (defn spin [& args]
   `(::spin ~@args))
-
-(defn model [& args]
-  `(::model ~@args))
 
 (defn set [& args]
   `(::set ~@args))
