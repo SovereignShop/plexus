@@ -292,7 +292,7 @@
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
 (def-segment-handler ::rotate
-  [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
+  [ret {:keys [start-transform]} {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
 
@@ -330,8 +330,8 @@
                     (m/rotatec [(/ Math/PI 2) r 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         tf (-> start-transform
-               (u/go-forward side-length)
-               (u/yaw (- (* 2 r))))]
+               (u/go-forward d)
+               (u/yaw (- r)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defn left [& opts]

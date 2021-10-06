@@ -93,10 +93,15 @@
      (mat/column-matrix tr))))
 
 (defn rotate33
-  [[vx vy vz] axis a]
-  [(rotation-vector vx axis a)
-   (rotation-vector vy axis a)
-   (rotation-vector vz axis a)])
+  [[vx vy vz :as m] axis a]
+  (if (vector? axis)
+    [(rotation-vector vx axis a)
+     (rotation-vector vy axis a)
+     (rotation-vector vz axis a)]
+    (case axis
+      :x (pitch* m a)
+      :y (yaw* m a)
+      :z (roll* m a))))
 
 (defn rotate [m axis a]
   (update-rotation m rotate33 axis a))
