@@ -19,10 +19,10 @@
   [m segment]
   (vary-meta segment assoc :start-transform m))
 
-(defn set-end-transform
+(defn set-transform
   "Set segment start rotation."
   [m segment]
-  (vary-meta segment assoc :end-transform m))
+  (vary-meta segment assoc :start-transform m))
 
 (defn get-translation
   "Get transform to end of segment."
@@ -67,12 +67,9 @@
         [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
         c (u/rotate33 a ortho angle)
         [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
-    (->> segment
-         (m/rotatev angle ortho)
-         (m/rotatev (- angle-2) ortho-2)
-         (m/translate translation))))
-
-(defn shift
-  "Send segment cross section to global origin."
-  [segment n]
-  ())
+    (with-meta
+      (->> segment
+           (m/rotatev angle ortho)
+           (m/rotatev (- angle-2) ortho-2)
+           (m/translate translation))
+      (meta segment))))

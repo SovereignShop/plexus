@@ -50,6 +50,14 @@
   [model name]
   (-> model meta :connections name))
 
+(defn replace-fn [n x]
+  (if (and (map? x) (:fn x))
+    (assoc x :fn n)
+    x))
+
+(defn new-fn [model n]
+  (postwalk (partial replace-fn n) model))
+
 (def default-model
   {:curve-radius 7
    :fn 10
@@ -112,7 +120,7 @@
   (let [m (path state (::list args))]
     (assoc models
            :models
-           (into {}
+           (into (-> m meta :models)
                  (map (fn [[name model]]
                         [name (conj (pop model) (vary-meta (peek model) assoc :branch (-> m meta :models name)))]))
                  models))))
@@ -124,10 +132,14 @@
           conj
           models
           (map (fn [[name model]]
-                 (let [m (f model
-                            (cond-> (assoc (meta (peek model))
+                 (let [m-meta (meta (peek model))
+                       m (f (if (:fn args)
+                              (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn args)))
+                              model)
+                            (cond-> (assoc m-meta
                                            :start-transform
                                            (:end-transform (meta (peek model))))
+                              (:fn args) (update :shape new-fn (:fn args))
                               (:order args) (assoc :order (:order args)))
                             (dissoc args :to :gap))]
                    [name (if gap
@@ -231,19 +243,11 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(defn replace-fn [n x]
-  (if (and (map? x) (:fn x))
-    (assoc x :fn n)
-    x))
-
-(defn new-fn [n model]
-  (postwalk (partial replace-fn n) model))
-
 (def-segment-handler ::forward
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length model twist mask]} args
         shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
-                (new-fn (:fn args) shape)
+                (new-fn shape (:fn args))
                 shape)
         part (m/with-fn fn
                (as-> (if model
@@ -327,11 +331,12 @@
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [(/ Math/PI 2) r 0])))
+                    (m/rotatec [(/ Math/PI 2) 0 0])))
         d (u/bAc->a curve-radius angle curve-radius)
         tf (-> start-transform
+               (u/yaw (- r))
                (u/go-forward d)
-               (u/yaw (- r)))]
+               (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (defn left [& opts]
