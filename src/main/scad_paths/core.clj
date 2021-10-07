@@ -85,19 +85,22 @@
 (defn path
   ([path-forms] (path {:models {}
                        :env {}
-                       :transforms {}}
+                       :transforms {}
+                       :scope []
+                       :index -1}
                       path-forms))
   ([state path-forms]
-   (loop [{:keys [models] :as state} state
+   (loop [{:keys [models index] :as state} state
           [form & forms] path-forms]
      (cond (nil? form)
            (->model models path-forms)
 
            (sequential? form)
            (if (= (first form) ::segment)
-             (recur state (concat (or (-> form second meta :path-spec) (normalize-segment (next form))) forms))
+             (recur
+              state (concat (or (-> form second meta :path-spec) (normalize-segment (next form))) forms))
              (let [args (parse-args form)
-                   new-state (path-form state args)]
+                   new-state (path-form (update state :index inc) args)]
                (recur new-state forms)))))))
 
 (defmethod path-form ::model
@@ -110,15 +113,21 @@
     (if existing-model
       (update ret :models assoc (:name model)
               (conj (pop existing-model)
-                    (vary-meta (peek existing-model) merge args)))
+                    (let [m (peek existing-model)]
+                      (cond-> (vary-meta m merge args)
+                        last-model (vary-meta merge  {:start-transform (:start-transform last-model)
+                                                      :end-transform (:end-transform last-model)})))))
       (-> ret
           (update :models assoc model-name [(with-meta (m/union) model)])
           (assoc :last-model model-name)))))
 
 (defmethod path-form ::branch
-  [{:keys [models] :as state} args]
-  (let [m (path state (::list args))]
-    (assoc models
+  [{:keys [models index] :as state} args]
+  (let [m (path (-> state
+                    (assoc :index -1)
+                    (update :scope conj index))
+                (::list args))]
+    (assoc state
            :models
            (into (-> m meta :models)
                  (map (fn [[name model]]
@@ -133,15 +142,18 @@
           models
           (map (fn [[name model]]
                  (let [m-meta (meta (peek model))
-                       m (f (if (:fn args)
-                              (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn args)))
+                       new-args (if (:shape args)
+                                  (update args :shape new-fn (:fn m-meta))
+                                  args)
+                       m (f (if (:fn new-args)
+                              (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn new-args)))
                               model)
                             (cond-> (assoc m-meta
                                            :start-transform
                                            (:end-transform (meta (peek model))))
-                              (:fn args) (update :shape new-fn (:fn args))
-                              (:order args) (assoc :order (:order args)))
-                            (dissoc args :to :gap))]
+                              (:fn new-args) (update :shape new-fn (:fn new-args))
+                              (:order new-args) (assoc :order (:order new-args)))
+                            (dissoc new-args :to :gap))]
                    [name (if gap
                            (conj (-> m pop pop) (vary-meta (-> m pop peek)
                                                            assoc
@@ -161,9 +173,13 @@
 
 (def-segment-handler ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle]
-         :or {curve-radius (:curve-radius ctx)
-              angle (/ Math/PI 2)}} args
+  (let [{:keys [curve-radius angle side-length]
+         :or {curve-radius (:curve-radius ctx)}} args
+        angle (if (and side-length (not angle))
+                (triangles/abc->A side-length curve-radius curve-radius)
+                (if (not angle)
+                  (/ Math/PI 2)
+                  angle))
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -182,9 +198,13 @@
 
 (def-segment-handler ::right
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle]
-         :or {curve-radius (:curve-radius ctx)
-              angle (/ Math/PI 2)}} args
+  (let [{:keys [curve-radius angle side-length]
+         :or {curve-radius (:curve-radius ctx)}} args
+         angle (if (and side-length (not angle))
+                (triangles/abc->A side-length curve-radius curve-radius)
+                (if (not angle)
+                  (/ Math/PI 2)
+                  angle))
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -202,10 +222,14 @@
 
 (def-segment-handler ::up
   [ret {:keys [fn shape gap start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle gap]
+  (let [{:keys [curve-radius angle gap side-length]
          :or {curve-radius (:curve-radius ctx)
-              angle (/ Math/PI 2)
               gap gap}} args
+        angle (if (and side-length (not angle))
+                (triangles/abc->A side-length curve-radius curve-radius)
+                (if (not angle)
+                  (/ Math/PI 2)
+                  angle))
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -224,9 +248,13 @@
 
 (def-segment-handler ::down
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle]
-         :or {curve-radius (:curve-radius ctx)
-              angle (/ Math/PI 2)}} args
+  (let [{:keys [curve-radius angle side-length]
+         :or {curve-radius (:curve-radius ctx)}} args
+        angle (if (and side-length (not angle))
+                (triangles/abc->A side-length curve-radius curve-radius)
+                (if (not angle)
+                  (/ Math/PI 2)
+                  angle))
         degrees  (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
@@ -245,7 +273,7 @@
 
 (def-segment-handler ::forward
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [length model twist mask]} args
+  (let [{:keys [length model twist mask center]} args
         shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
                 (new-fn shape (:fn args))
                 shape)
@@ -253,26 +281,26 @@
                (as-> (if model
                        model
                        (->> shape
-                            (m/extrude-linear {:height length :center false :twist twist}))) m
+                            (m/extrude-linear {:height length :center center :twist twist}))) m
                  (if mask
                    (m/difference m mask)
                    m)))
-        tf (u/go-forward start-transform length)]
+        tf (u/go-forward start-transform (cond-> length center (/ 2)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (def-segment-handler ::backward
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+  [ret {:keys [fn shape start-transform center] :as ctx} args]
   (let [{:keys [length model twist mask]}  args
         part (binding [m/*fn* fn]
                (as-> (if model
                        model
                        (->> shape
-                            (m/extrude-linear {:height length :center false :twist twist})
+                            (m/extrude-linear {:height length :center center :twist twist})
                             (m/translate [0 0 (- length)]))) m
                  (if mask
                    (m/difference m mask)
                    m)))
-        tf (u/go-backward start-transform length)]
+        tf (u/go-backward start-transform (cond-> length center (/ 2)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
 (def-segment-handler ::roll
@@ -296,7 +324,7 @@
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
 (def-segment-handler ::rotate
-  [ret {:keys [start-transform]} {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
+  [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
 
@@ -322,7 +350,7 @@
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius side-length]
          :or {curve-radius (:curve-radius ctx)
-              side-length (/ Math/PI 2)}} args
+              side-length 10}} args
         angle (triangles/abc->A side-length curve-radius curve-radius)
         degrees (* angle 57.29578)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
@@ -389,6 +417,8 @@
 
 (defn segment [& args]
   `(::segment ~@args))
+
+()
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
