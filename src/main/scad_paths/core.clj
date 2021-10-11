@@ -32,7 +32,8 @@
                     (and branch join-branch?) (conj (transform-segments branch join-op join-branch?))))))))))
 
 (defn ->model [models path-spec]
-  (let [segments (->> (mapcat #(transform-segments % identity true) (vals models))
+  (let [segs (mapcat #(transform-segments % identity true) (vals models))
+        segments (->> segs
                       (group-by (juxt (comp :order meta) (comp :mask? meta)))
                       (sort-by key))]
     (with-meta
@@ -43,12 +44,13 @@
               (m/union)
               segments)
       {:segments segments
+       :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
        :models models
        :path-spec path-spec})))
 
 (defn lookup-transform
   [model name]
-  (-> model meta :connections name))
+  (-> model meta :segment-groups name peek meta :end-transform))
 
 (defn replace-fn [n x]
   (if (and (map? x) (:fn x))
@@ -151,15 +153,19 @@
                             (cond-> (assoc m-meta
                                            :start-transform
                                            (:end-transform (meta (peek model))))
+                              (:name new-args) (assoc :name (:name new-args))
                               (:fn new-args) (update :shape new-fn (:fn new-args))
                               (:order new-args) (assoc :order (:order new-args)))
                             (dissoc new-args :to :gap))]
-                   [name (if gap
-                           (conj (-> m pop pop) (vary-meta (-> m pop peek)
-                                                           assoc
-                                                           :end-transform
-                                                           (:end-transform (meta (peek m)))))
-                           m)]))
+                   [name (let [m (if gap
+                                   (conj (-> m pop pop) (vary-meta (-> m pop peek)
+                                                                   assoc
+                                                                   :end-transform
+                                                                   (:end-transform (meta (peek m)))))
+                                   m)]
+                           (if (:name new-args)
+                             (conj (pop m) (vary-meta (peek m) assoc :name (:name new-args)))
+                             (conj (pop m) (vary-meta (peek m) dissoc :name))))]))
                (if to (select-keys models to) models)))))
 
 (defmacro def-segment-handler [key & func]
@@ -183,7 +189,7 @@
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> shape
-                    (m/rotatec [0 0 Math/PI])
+                    (m/rotatec [Math/PI 0 0])
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
@@ -324,8 +330,10 @@
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
 (def-segment-handler ::rotate
-  [ret {:keys [start-transform]} {:keys [axis angle] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
-  (let [seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
+  [ret {:keys [start-transform]} {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
+  (let [axis (if x :x (if y :y (if z :z axis)))
+        angle (or x y z angle)
+        seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
 
 (def-segment-handler ::transform
