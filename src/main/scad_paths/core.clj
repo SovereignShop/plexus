@@ -110,6 +110,8 @@
   (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
                      (meta (peek m)))
         model (into (or last-model default-model) args)
+        model (cond-> model
+                (:shape model) (update :shape new-fn (or (:fn args) (:fn model))))
         model-name (:name model)
         existing-model (-> ret :models model-name)]
     (if existing-model
@@ -117,6 +119,7 @@
               (conj (pop existing-model)
                     (let [m (peek existing-model)]
                       (cond-> (vary-meta m merge args)
+                        (:shape args) (vary-meta  update :shape new-fn (or (:fn args) (:fn (meta (peek existing-model)))))
                         last-model (vary-meta merge  {:start-transform (:start-transform last-model)
                                                       :end-transform (:end-transform last-model)})))))
       (-> ret
@@ -285,7 +288,7 @@
                 shape)
         part (m/with-fn fn
                (as-> (if model
-                       model
+                       (new-fn model (or (:fn args) (:fn ctx)))
                        (->> shape
                             (m/extrude-linear {:height length :center center :twist twist}))) m
                  (if mask
@@ -299,7 +302,7 @@
   (let [{:keys [length model twist mask]}  args
         part (binding [m/*fn* fn]
                (as-> (if model
-                       model
+                       (new-fn model (or (:fn args) (:fn ctx)))
                        (->> shape
                             (m/extrude-linear {:height length :center center :twist twist})
                             (m/translate [0 0 (- length)]))) m
@@ -426,7 +429,11 @@
 (defn segment [& args]
   `(::segment ~@args))
 
-()
+(defn to [& args]
+  `(::to ~@args))
+
+(defn mask [& args]
+  `(::model (conj (vec args) :mask? true)))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
