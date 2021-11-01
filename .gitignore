@@ -1,5 +1,7 @@
 pom.xml
 pom.xml.asc
+*.scad
+*.stl
 *.jar
 *.class
 /lib/
