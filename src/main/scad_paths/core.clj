@@ -45,12 +45,15 @@
                     :segments segments
                     :start-transform start-tf))
            (recur (meta seg)
-                  segs
-                  (cond-> (conj ret (sg/project seg))
-                    (and branch join-branch?) (into  (->> branch
-                                                          (map meta)
-                                                          (map (juxt :models :path-spec))
-                                                          (map (partial apply ->model))))))))))))
+                  (cond-> segs
+                    branch (into  (->> branch
+                                       (map meta)
+                                       (map :models)
+                                       (mapcat vals)
+                                       (apply concat))))
+                  (if branch
+                    ret
+                    (conj ret (sg/project seg))))))))))
 
 (defn ->model [models path-spec]
   (let [segs (mapcat #(transform-segments % identity true) (vals models))
