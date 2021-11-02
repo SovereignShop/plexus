@@ -10,6 +10,24 @@
 
 (defmulti path-form (fn [_ args] (:op args)))
 
+(declare ->model)
+
+(defn unnest [m]
+  (if (and (sequential? m)
+           (contains? #{:union :difference :intersection} (first m)))
+    (loop [[x & xs] m
+           ret []]
+      (if (nil? x)
+        (seq ret)
+        (if (sequential? x)
+          (if (= (first ret) (first x))
+            (recur (concat xs (next x)) ret)
+            (if (sequential? (first x))
+              (recur (concat xs x) ret)
+              (recur xs (conj (unnest x)))))
+          (recur xs (conj ret (unnest x))))))
+    m))
+
 (defn transform-segments
   ([segments] (transform-segments segments m/union true))
   ([segments join-op join-branch?]
@@ -29,7 +47,10 @@
            (recur (meta seg)
                   segs
                   (cond-> (conj ret (sg/project seg))
-                    (and branch join-branch?) (conj (transform-segments branch join-op join-branch?))))))))))
+                    (and branch join-branch?) (into  (->> branch
+                                                          (map meta)
+                                                          (map (juxt :models :path-spec))
+                                                          (map (partial apply ->model))))))))))))
 
 (defn ->model [models path-spec]
   (let [segs (mapcat #(transform-segments % identity true) (vals models))
@@ -39,7 +60,7 @@
     (with-meta
       (reduce (fn [ret [[_ mask?] models]]
                 (if mask?
-                  (m/difference ret (m/union models) )
+                  (m/difference ret (m/union models))
                   (m/union ret (m/union models))))
               (m/union)
               segments)
@@ -128,16 +149,19 @@
 
 (defmethod path-form ::branch
   [{:keys [models index] :as state} args]
-  (let [m (path (-> state
+  (let [from-model (:from args)
+        model (get models from-model)
+        m (path (-> state
+                    (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
                     (assoc :index -1)
                     (update :scope conj index))
                 (::list args))]
+    (-> m meta :models from-model peek meta :branch)
     (assoc state
            :models
-           (into (-> m meta :models)
-                 (map (fn [[name model]]
-                        [name (conj (pop model) (vary-meta (peek model) assoc :branch (-> m meta :models name)))]))
-                 models))))
+           (assoc models
+                  from-model
+                  (conj (pop model) (vary-meta (peek model) update :branch conj m))))))
 
 (defn update-models [{:keys [models] :as state} {:keys [to gap] :as args} f]
   (assoc state
