@@ -10,8 +10,6 @@
 
 (defmulti path-form (fn [_ args] (:op args)))
 
-(declare ->model)
-
 (defn unnest [m]
   (if (and (sequential? m)
            (contains? #{:union :difference :intersection} (first m)))
@@ -46,16 +44,16 @@
                     :start-transform start-tf))
            (recur (meta seg)
                   (cond-> segs
-                    branch (into  (->> branch
-                                       (map meta)
-                                       (map :models)
-                                       (mapcat vals)
-                                       (apply concat))))
+                    branch (concat (->> branch
+                                        (map meta)
+                                        (map :models)
+                                        (mapcat vals)
+                                        (apply concat))))
                   (if branch
-                    ret
+                    (conj ret (sg/project seg))
                     (conj ret (sg/project seg))))))))))
 
-(defn ->model [models path-spec]
+(defn ->model [models path-spec transforms]
   (let [segs (mapcat #(transform-segments % identity true) (vals models))
         segments (->> segs
                       (group-by (juxt (comp :order meta) (comp :mask? meta)))
@@ -68,13 +66,15 @@
               (m/union)
               segments)
       {:segments segments
+       :transforms transforms
        :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
        :models models
        :path-spec path-spec})))
 
 (defn lookup-transform
   [model name]
-  (-> model meta :segment-groups name peek meta :end-transform))
+  (or (-> model meta :segment-groups name peek meta :end-transform)
+      (-> model meta :transforms name)))
 
 (defn replace-fn [n x]
   (if (and (map? x) (:fn x))
@@ -119,7 +119,7 @@
    (loop [{:keys [models index] :as state} state
           [form & forms] path-forms]
      (cond (nil? form)
-           (->model models path-forms)
+           (->model models path-forms (:transforms state))
 
            (sequential? form)
            (if (= (first form) ::segment)
@@ -166,6 +166,13 @@
                   from-model
                   (conj (pop model) (vary-meta (peek model) update :branch conj m))))))
 
+(defmethod path-form ::save-transform
+  [state args]
+  (let [model-name (:model args)
+        model (get (:models state) model-name)
+        transform-name (:name args)]
+    (update state :transforms assoc transform-name (-> model peek meta :end-transform))))
+
 (defn update-models [{:keys [models] :as state} {:keys [to gap] :as args} f]
   (assoc state
          :models
@@ -193,9 +200,15 @@
                                                                    :end-transform
                                                                    (:end-transform (meta (peek m)))))
                                    m)]
-                           (if (:name new-args)
-                             (conj (pop m) (vary-meta (peek m) assoc :name (:name new-args)))
-                             (conj (pop m) (vary-meta (peek m) dissoc :name))))]))
+                           (conj (pop m)
+                                 (vary-meta
+                                  (peek m)
+                                  (fn [mta]
+                                    (dissoc
+                                     (if (:name new-args)
+                                       (assoc mta :name (:name new-args))
+                                       (dissoc mta :name))
+                                     :branch)))))]))
                (if to (select-keys models to) models)))))
 
 (defmacro def-segment-handler [key & func]
@@ -461,6 +474,9 @@
 
 (defn mask [& args]
   `(::model (conj (vec args) :mask? true)))
+
+(defn save-transform [& args]
+  `(::save-transform ~@args))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
