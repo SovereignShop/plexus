@@ -77,7 +77,10 @@
       (-> model meta :transforms name)))
 
 (defn replace-fn [n x]
-  (if (and (map? x) (:fn x))
+  (if (and (map? x)
+           (or (:fn x)
+               (:r x)
+               (:angle x)))
     (assoc x :fn n)
     x))
 
