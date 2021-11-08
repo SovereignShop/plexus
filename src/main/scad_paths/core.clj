@@ -176,43 +176,47 @@
         transform-name (:name args)]
     (update state :transforms assoc transform-name (-> model peek meta :end-transform))))
 
-(defn update-models [{:keys [models] :as state} {:keys [to gap] :as args} f]
-  (assoc state
-         :models
-         (reduce
-          conj
-          models
-          (map (fn [[name model]]
-                 (let [m-meta (meta (peek model))
-                       new-args (if (:shape args)
-                                  (update args :shape new-fn (:fn m-meta))
-                                  args)
-                       m (f (if (:fn new-args)
-                              (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn new-args)))
-                              model)
-                            (cond-> (assoc m-meta
-                                           :start-transform
-                                           (:end-transform (meta (peek model))))
-                              (:name new-args) (assoc :name (:name new-args))
-                              (:fn new-args) (update :shape new-fn (:fn new-args))
-                              (:order new-args) (assoc :order (:order new-args)))
-                            (dissoc new-args :to :gap))]
-                   [name (let [m (if gap
-                                   (conj (-> m pop pop) (vary-meta (-> m pop peek)
-                                                                   assoc
-                                                                   :end-transform
-                                                                   (:end-transform (meta (peek m)))))
-                                   m)]
-                           (conj (pop m)
-                                 (vary-meta
-                                  (peek m)
-                                  (fn [mta]
-                                    (dissoc
-                                     (if (:name new-args)
-                                       (assoc mta :name (:name new-args))
-                                       (dissoc mta :name))
-                                     :branch)))))]))
-               (if to (select-keys models to) models)))))
+(defn update-models [{:keys [models] :as state} {:keys [to gap skip] :as args} f]
+  (let [gap-models (clojure.core/set
+                    (if (boolean? gap)
+                      (or to (keys models))
+                      gap))]
+    (assoc state
+           :models
+           (reduce
+            conj
+            models
+            (map (fn [[name model]]
+                   (let [m-meta (meta (peek model))
+                         new-args (if (:shape args)
+                                    (update args :shape new-fn (:fn m-meta))
+                                    args)
+                         m (f (if (:fn new-args)
+                                (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn new-args)))
+                                model)
+                              (cond-> (assoc m-meta
+                                             :start-transform
+                                             (:end-transform (meta (peek model))))
+                                (:name new-args) (assoc :name (:name new-args))
+                                (:fn new-args) (update :shape new-fn (:fn new-args))
+                                (:order new-args) (assoc :order (:order new-args)))
+                              (dissoc new-args :to :gap))]
+                     [name (let [m (if (contains? gap-models name)
+                                     (conj (-> m pop pop) (vary-meta (-> m pop peek)
+                                                                     assoc
+                                                                     :end-transform
+                                                                     (:end-transform (meta (peek m)))))
+                                     m)]
+                             (conj (pop m)
+                                   (vary-meta
+                                    (peek m)
+                                    (fn [mta]
+                                      (dissoc
+                                       (if (:name new-args)
+                                         (assoc mta :name (:name new-args))
+                                         (dissoc mta :name))
+                                       :branch)))))]))
+                 (if to (select-keys models to) models))))))
 
 (defmacro def-segment-handler [key & func]
   `(defmethod path-form ~key
