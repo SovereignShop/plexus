@@ -340,9 +340,22 @@
         tf (u/go-forward start-transform (cond-> length center (/ 2)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
+(def-segment-handler ::offset
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length offset]} args
+        shape (m/offset offset
+                        (if (and (:fn args) (not= (:fn ctx) (:fn args)))
+                          (new-fn shape (or (:fn args) (:fn ctx)))
+                          shape))
+        part (m/with-fn fn
+               (->> shape
+                    (m/extrude-linear {:height length :center false})))
+        tf (u/go-forward start-transform length)]
+    (conj ret (with-meta part (assoc ctx :end-transform tf :shape shape)))))
+
 (def-segment-handler ::backward
-  [ret {:keys [fn shape start-transform center] :as ctx} args]
-  (let [{:keys [length model twist mask]}  args
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [{:keys [length model twist mask center]}  args
         part (binding [m/*fn* fn]
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
@@ -480,6 +493,9 @@
 
 (defn save-transform [& args]
   `(::save-transform ~@args))
+
+(defn offset [& args]
+  `(::offset ~@args))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
