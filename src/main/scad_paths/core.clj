@@ -157,7 +157,7 @@
           (assoc :last-model model-name)))))
 
 (defmethod path-form ::branch
-  [{:keys [models index] :as state} args]
+  [{:keys [models index transforms] :as state} args]
   (let [from-model (:from args)
         model (get models from-model)
         m (path (-> state
@@ -167,17 +167,23 @@
                 (::list args))]
     (assoc state
            :models
-           (merge #_(-> m meta :models)
-                  (assoc models
-                         from-model
-                         (conj (pop model) (vary-meta (peek model) update :branch conj m)))))))
+           (assoc models
+                  from-model
+                  (conj (pop model) (vary-meta (peek model) update :branch conj m)))
+           :transforms (merge transforms (-> m meta :transforms)))))
+
+(defn ->keyword [namespace name*]
+  (keyword (name namespace) (name name*)))
 
 (defmethod path-form ::save-transform
   [state args]
   (let [model-name (:model args)
         model (get (:models state) model-name)
-        transform-name (:name args)]
-    (update state :transforms assoc transform-name (-> model peek meta :end-transform))))
+        model-state (-> model peek meta)
+        namespace (:namespace model-state)
+        transform-name (cond->> (:name args)
+                         namespace (->keyword namespace))]
+    (update state :transforms assoc transform-name (:end-transform model-state))))
 
 (defn update-models [{:keys [models] :as state} {:keys [to gap skip op] :as args} f]
   (let [gap-models (clojure.core/set
@@ -517,17 +523,19 @@
   `(::model ~@(concat args [:mask? false])))
 
 (defn pattern [& args]
-  (let [{:keys [from axis distances angles ::list]} (parse-args (list* :na args))]
+  (let [{:keys [from axis distances angles namespaces ::list]} (parse-args (list* :na args))]
     (assert (or angles distances))
     (apply segment
-           (for [[angle distance]
+           (for [[angle distance namespace]
                  (map vector
                       (or angles (repeat 0))
-                      (or distances (repeat 0)))]
+                      (or distances (repeat 0))
+                      (or namespaces (repeat nil)))]
              (branch
               :from from
               (rotate axis angle)
               (translate axis distance)
+              (set :namespace namespace)
               (segment list))))))
 
 (defn parse-path [path-spec]
@@ -544,7 +552,6 @@
 
 (defmacro defmodel [name & path]
   (let [[opts path] (parse-path path)]
-    `(do (binding [m/*fn* ~(get opts :fn 10)]
-           (def ~name
-             (path ~path)))
-         ~name)))
+    `(binding [m/*fn* ~(get opts :fn 10)]
+       (def ~name
+         (path ~path)))))
