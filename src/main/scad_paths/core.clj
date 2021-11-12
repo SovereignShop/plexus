@@ -89,6 +89,7 @@
 
 (def default-model
   {:curve-radius 7
+   :shape nil
    :fn 10
    :order 0
    :mask? false
@@ -127,7 +128,9 @@
            (sequential? form)
            (if (= (first form) ::segment)
              (recur
-              state (concat (or (-> form second meta :path-spec) (normalize-segment (next form))) forms))
+              state
+              (concat (or (-> form second meta :path-spec) (normalize-segment (next form)))
+                      forms))
              (let [args (parse-args form)
                    new-state (path-form (update state :index inc) args)]
                (recur new-state forms)))))))
@@ -136,7 +139,7 @@
   [ret args]
   (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
                      (meta (peek m)))
-        model (into (or last-model default-model) args)
+        model (into (or (dissoc last-model :shape) default-model) args)
         model (cond-> model
                 (:shape model) (update :shape new-fn (or (:fn args) (:fn model))))
         model-name (:name model)
@@ -162,12 +165,12 @@
                     (assoc :index -1)
                     (update :scope conj index))
                 (::list args))]
-    (-> m meta :models from-model peek meta :branch)
     (assoc state
            :models
-           (assoc models
-                  from-model
-                  (conj (pop model) (vary-meta (peek model) update :branch conj m))))))
+           (merge #_(-> m meta :models)
+                  (assoc models
+                         from-model
+                         (conj (pop model) (vary-meta (peek model) update :branch conj m)))))))
 
 (defmethod path-form ::save-transform
   [state args]
@@ -176,7 +179,7 @@
         transform-name (:name args)]
     (update state :transforms assoc transform-name (-> model peek meta :end-transform))))
 
-(defn update-models [{:keys [models] :as state} {:keys [to gap skip] :as args} f]
+(defn update-models [{:keys [models] :as state} {:keys [to gap skip op] :as args} f]
   (let [gap-models (clojure.core/set
                     (if (boolean? gap)
                       (or to (keys models))
@@ -211,11 +214,11 @@
                                    (vary-meta
                                     (peek m)
                                     (fn [mta]
-                                      (dissoc
-                                       (if (:name new-args)
-                                         (assoc mta :name (:name new-args))
-                                         (dissoc mta :name))
-                                       :branch)))))]))
+                                      (cond-> (if (:name new-args)
+                                                (assoc mta :name (:name new-args))
+                                                (dissoc mta :name))
+                                        (> (count m) (count model))
+                                        (dissoc :branch))))))]))
                  (if to (select-keys models to) models))))))
 
 (defmacro def-segment-handler [key & func]
@@ -225,7 +228,7 @@
 
 (def-segment-handler ::set
   [ret _ args]
-  (conj (pop ret) (vary-meta (peek ret) merge args)))
+  (conj (pop ret) (vary-meta (peek ret) merge (dissoc args :op))))
 
 (def-segment-handler ::left
   [ret {:keys [fn shape start-transform] :as ctx} args]
@@ -356,6 +359,12 @@
                     (m/extrude-linear {:height length :center false})))
         tf (u/go-forward start-transform length)]
     (conj ret (with-meta part (assoc ctx :end-transform tf :shape shape)))))
+
+(def-segment-handler ::minkowski
+  [ret {:keys [fn shape start-transform] :as ctx} args]
+  (let [minkowski-shape (:shape args)
+        new-shape (m/minkowski minkowski-shape shape)]
+    (conj (pop ret) (vary-meta (peek ret) assoc :shape new-shape))))
 
 (def-segment-handler ::backward
   [ret {:keys [fn shape start-transform] :as ctx} args]
@@ -493,13 +502,33 @@
   `(::to ~@args))
 
 (defn mask [& args]
-  `(::model (conj (vec args) :mask? true)))
+  `(::model ~@(conj (vec args) :mask? true)))
 
 (defn save-transform [& args]
   `(::save-transform ~@args))
 
 (defn offset [& args]
   `(::offset ~@args))
+
+(defn minkowski [& args]
+  `(::minkowski ~@args))
+
+(defn body [& args]
+  `(::model ~@(concat args [:mask? false])))
+
+(defn pattern [& args]
+  (let [{:keys [from axis distances angles ::list]} (parse-args (list* :na args))]
+    (assert (or angles distances))
+    (apply segment
+           (for [[angle distance]
+                 (map vector
+                      (or angles (repeat 0))
+                      (or distances (repeat 0)))]
+             (branch
+              :from from
+              (rotate axis angle)
+              (translate axis distance)
+              (segment list))))))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
