@@ -114,7 +114,6 @@
 
 (defn path
   ([path-forms] (path {:models {}
-                       :env {}
                        :transforms {}
                        :scope []
                        :index -1}
@@ -356,15 +355,18 @@
 (def-segment-handler ::offset
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length offset]} args
-        shape (m/offset offset
-                        (if (and (:fn args) (not= (:fn ctx) (:fn args)))
-                          (new-fn shape (or (:fn args) (:fn ctx)))
-                          shape))
+        shape  (m/offset offset
+                         (if (and (:fn args) (not= (:fn ctx) (:fn args)))
+                           (new-fn shape (or (:fn args) (:fn ctx)))
+                           shape))
         part (m/with-fn fn
-               (->> shape
-                    (m/extrude-linear {:height length :center false})))
-        tf (u/go-forward start-transform length)]
-    (conj ret (with-meta part (assoc ctx :end-transform tf :shape shape)))))
+               (cond->> shape
+                 length (m/extrude-linear {:height length :center false})))
+        tf (cond-> start-transform
+             length (u/go-forward length))]
+    (if length
+      (conj ret (with-meta part (assoc ctx :end-transform tf :shape shape)))
+      (conj (pop ret) (vary-meta (peek ret) assoc :shape new-shape)))))
 
 (def-segment-handler ::minkowski
   [ret {:keys [fn shape start-transform] :as ctx} args]
@@ -453,6 +455,10 @@
                (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
+(def-segment-handler ::union
+  [ret _ {:keys [shape]}]
+  (conj (pop ret) (vary-meta (peek ret) update :shape m/union shape)))
+
 (defn left [& opts]
   `(::left ~@opts))
 
@@ -521,6 +527,9 @@
 
 (defn body [& args]
   `(::model ~@(concat args [:mask? false])))
+
+(defn union [& args]
+  `(::union ~@args))
 
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces ::list]} (parse-args (list* :na args))]
