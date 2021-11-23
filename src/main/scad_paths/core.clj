@@ -355,17 +355,17 @@
 (def-segment-handler ::offset
   [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length offset]} args
-        shape  (m/offset offset
+        new-shape  (m/offset offset
                          (if (and (:fn args) (not= (:fn ctx) (:fn args)))
                            (new-fn shape (or (:fn args) (:fn ctx)))
                            shape))
         part (m/with-fn fn
-               (cond->> shape
+               (cond->> new-shape
                  length (m/extrude-linear {:height length :center false})))
         tf (cond-> start-transform
              length (u/go-forward length))]
     (if length
-      (conj ret (with-meta part (assoc ctx :end-transform tf :shape shape)))
+      (conj ret (with-meta part (assoc ctx :end-transform tf :shape new-shape)))
       (conj (pop ret) (vary-meta (peek ret) assoc :shape new-shape)))))
 
 (def-segment-handler ::minkowski
@@ -516,6 +516,9 @@
 (defn mask [& args]
   `(::model ~@(conj (vec args) :mask? true)))
 
+(defn body [& args]
+  `(::model ~@(concat args [:mask? false])))
+
 (defn save-transform [& args]
   `(::save-transform ~@args))
 
@@ -524,9 +527,6 @@
 
 (defn minkowski [& args]
   `(::minkowski ~@args))
-
-(defn body [& args]
-  `(::model ~@(concat args [:mask? false])))
 
 (defn union [& args]
   `(::union ~@args))
