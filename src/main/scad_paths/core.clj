@@ -1,5 +1,6 @@
 (ns scad-paths.core
   (:require
+   [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
    [scad-clj.scad :as s]
    [scad-paths.transforms :as tr]
@@ -335,8 +336,7 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
-(def-segment-handler ::forward
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+(defn forward-impl* [ret {:keys [fn shape start-transform] :as ctx} args]
   (let [{:keys [length model twist mask center]} args
         shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
                 (new-fn shape (:fn args))
@@ -351,6 +351,10 @@
                    m)))
         tf (u/go-forward start-transform (cond-> length center (/ 2)))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
+
+(def-segment-handler ::forward
+  [ret ctx args]
+  (forward-impl* ret ctx args))
 
 (def-segment-handler ::offset
   [ret {:keys [fn shape start-transform] :as ctx} args]
@@ -409,12 +413,16 @@
              z (u/go-forward z :z))]
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
-(def-segment-handler ::rotate
+(defn rotate-impl
   [ret {:keys [start-transform]} {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [axis (if x :x (if y :y (if z :z axis)))
         angle (or x y z angle)
         seg (vary-meta (peek ret) assoc :end-transform (u/rotate start-transform axis angle))]
     (conj (pop ret) seg)))
+
+(def-segment-handler ::rotate
+  [ret ctx args]
+  (rotate-impl ret ctx args))
 
 (def-segment-handler ::transform
   [ret _ {:keys [transform] :or {transform u/identity-mat}}]
@@ -455,9 +463,53 @@
                (u/yaw (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf)))))
 
+(def-segment-handler ::add-ns
+  [ret ctx {:keys [namespace]}]
+  (if namespace
+    (conj (pop ret) (vary-meta (peek ret) update :namespace #(keyword (if %1
+                                                                        (str (name %1) "." (name namespace))
+                                                                        namespace))))
+    ret))
+
 (def-segment-handler ::union
   [ret _ {:keys [shape]}]
   (conj (pop ret) (vary-meta (peek ret) update :shape m/union shape)))
+
+(def-segment-handler ::forward-until
+  [ret {:keys [start-transform]} {:keys [x]}]
+  (let [rot (u/rotation-matrix start-transform)
+        z (nth rot 2)
+        x* (nth rot 1)
+        dx (- x x*)
+        angle (u/angle-between x z)]
+    (/ dx (Math/cos angle))
+    ret))
+
+
+(defn pythag-distance [[x1 y1 z1]
+                       [x2 y2 z2]]
+  (Math/sqrt (+ (Math/pow (- x2 x1) 2)
+                (Math/pow (- y2 y1) 2)
+                (Math/pow (- z2 z1) 2))))
+
+(def-segment-handler ::extrude-to
+  [ret {:keys [start-transform] :as ctx} {:keys [target-transform]}]
+  (let [extrusion-length (pythag-distance
+                          (u/translation-vector target-transform)
+                          (u/translation-vector start-transform))
+        v (mat/sub
+           (u/translation-vector target-transform)
+           (u/translation-vector start-transform))
+        r0 (u/rotation-matrix start-transform)
+        [angle ortho] (u/rotation-axis-and-angle (nth r0 2) v [0 0 1])
+        ret (rotate-impl ret ctx {:axis ortho :angle angle})
+        ctx (-> ret peek meta)
+        ret (forward-impl* ret (assoc ctx :start-transform (:end-transform ctx)) {:length extrusion-length})
+        ]
+    ret))
+
+(defn extrude-to [& opts]
+  `(::extrude-to ~@opts))
 
 (defn left [& opts]
   `(::left ~@opts))
@@ -531,6 +583,12 @@
 (defn union [& args]
   `(::union ~@args))
 
+(defn add-ns [& args]
+  `(::add-ns ~@args))
+
+(defn forward-until [& args]
+  `(::forward-until ~@args))
+
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces ::list]} (parse-args (list* :na args))]
     (assert (or angles distances))
@@ -544,9 +602,10 @@
               :from from
               (rotate axis angle)
               (translate axis distance)
-              (set :namespace namespace)
+              (add-ns :namespace namespace)
               (segment list))))))
 
+(str nil "." )
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
          args {}]

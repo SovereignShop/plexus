@@ -150,6 +150,11 @@
 
 (def identity-mat [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 0]])
 
+(defn distance [a b]
+  (Math/cbrt
+   (apply + (mat/mul (mat/sub a b)
+                     (mat/sub a b)))))
+
 (defn ->inverse-scad-transform
   ([m] (->inverse-scad-transform identity-mat m))
   ([m1 m2]
