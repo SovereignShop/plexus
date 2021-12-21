@@ -1,0 +1,18 @@
+#+TITLE: Notes
+
+* Bugs
+
+** Offset after branch
+#+begin_src clojure
+(defmodel bug
+  (body :shape (m/circle 75/2) :name :body)
+  (mask :shape (m/circle 25/2) :name :mask)
+  (forward :length 3 :to [:body])
+  (branch
+   :from :body
+   (forward :length 100 :to [:mask]))
+  (offset :offset (- (- 75/2 25/2)) :to [:body])
+  (forward :length 10 :to [:body])
+  (hull :to [:body]))
+#+end_src
+ Works if you branch from :mask.
