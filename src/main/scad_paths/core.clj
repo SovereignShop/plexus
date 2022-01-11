@@ -431,12 +431,13 @@
 
 (def-segment-handler ::spin
   [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [angle]
+  (let [{:keys [angle axis]
          :or {angle (/ Math/PI 2)}} args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> (m/difference
-                     shape
+                     (cond->> shape
+                       (= axis :y) (m/rotatec [0 0 (/ Math/PI 2)]))
                      (->> (m/square 1000 1000)
                           (m/translate [-500 0])))
                     (m/extrude-rotate {:angle degrees})))]
@@ -605,7 +606,6 @@
               (add-ns :namespace namespace)
               (segment list))))))
 
-(str nil "." )
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
          args {}]
