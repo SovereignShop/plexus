@@ -169,3 +169,28 @@
             (m/translate translation)
             (m/rotatev angle ortho)
             (m/rotatev (- angle-2) ortho-2))))))
+
+
+(defn extrude-rotate [{:keys [angle elevation step-fn model curve-radius face-number] :or {elevation 0} :as args} block]
+  (if (and (not step-fn) (= 0 elevation))
+    [block (->> block
+                (m/rotatec [0 0 (- (/ Math/PI 2))])
+                (m/translate [curve-radius 0])
+                (m/extrude-rotate args)
+                (m/with-fn face-number))]
+    (let [steps m/*fn*
+          shapes (for [idx (range 0 (inc steps))]
+                   (if step-fn (step-fn idx model) block))]
+      [(last shapes)
+       (->> (for [[idx shape] (map list (range (inc steps)) shapes)]
+              (->> (m/with-fn face-number shape)
+                   (m/rotatec [0 0 (- (/ Math/PI 2))])
+                   (m/translate [curve-radius 0 0])
+                   (m/extrude-rotate {:angle 0.02})
+                   (m/rotatec [0 0 (* idx (/ angle steps) 0.01745329)])
+                   (m/translate [0 0 (* idx (/ elevation steps))])))
+            (partition 2 1)
+            (map (fn [[l r]]
+                   (m/hull l r)))
+            (m/union)
+            (m/with-fn face-number))])))
