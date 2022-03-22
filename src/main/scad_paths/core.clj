@@ -55,40 +55,15 @@
                     (conj ret (sg/project seg))
                     (conj ret (sg/project seg))))))))))
 
-(defn transform-segments-2
-  ([segments] (transform-segments segments m/union true))
-  ([segments join-op join-branch?]
-   (let [first-segment-data (meta (first segments))
-         start-tf (:start-transform first-segment-data)
-         inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
-     (loop [segment-data first-segment-data
-            [seg & segs] segments
-            ret []]
-       (let [{:keys [branch]} (meta seg)]
-         (if (nil? seg)
-           (with-meta
-             (if (not join-branch?) (inverse-tf (join-op ret)) (join-op ret))
-             (assoc segment-data
-                    :segments segments
-                    :start-transform start-tf))
-           (recur (meta seg)
-                  (cond-> segs
-                    branch (concat (->> branch ;; Needs re-write. Transform-segments needs to be state -> state,
-                                               ;; building up segments.
-                                        (map meta)
-                                        (map :models)
-                                        (mapcat vals)
-                                        (apply concat))))
-                  (if branch
-                    (conj ret (sg/project seg))
-                    (conj ret (sg/project seg))))))))))
-
 (defn result-tree->model
-  [{:keys [models result path-spec transforms name] :as state}]
-  (let [f (fn walk
+  [{:keys [models result] :as state}]
+  (let [segs (mapcat #(transform-segments % identity true)
+                     (vals models))
+        segments (group-by (comp :name meta) segs)
+        f (fn walk
             ([tree]
              (if (keyword? tree)
-               (apply m/union (transform-segments (get models tree) identity true))
+               (apply m/union (get segments tree))
                (case (first tree)
                  ::union (apply m/union (map walk (next tree)))
                  ::difference (apply m/difference (map walk (next tree)))
@@ -219,7 +194,7 @@
                  (::list args))]
     (assoc state
            :models
-           (assoc (merge models (-> m meta :models))
+           (assoc models
                   from-model
                   (conj (pop model) (vary-meta (peek model) update :branch conj m)))
            :transforms (merge transforms (-> m meta :transforms)))))
@@ -279,7 +254,8 @@
                                     (fn [mta]
                                       (cond-> (if (:name new-args)
                                                 (assoc mta :name (:name new-args))
-                                                (dissoc mta :name))
+                                                mta
+                                                #_(dissoc mta :name))
                                         (> (count m) (count model))
                                         (dissoc :branch))))))]))
                  (reduce dissoc
