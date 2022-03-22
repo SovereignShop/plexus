@@ -45,7 +45,8 @@
                     :start-transform start-tf))
            (recur (meta seg)
                   (cond-> segs
-                    branch (concat (->> branch
+                    branch (concat (->> branch ;; Needs re-write. Transform-segments needs to be state -> state,
+                                               ;; building up segments.
                                         (map meta)
                                         (map :models)
                                         (mapcat vals)
@@ -54,48 +55,68 @@
                     (conj ret (sg/project seg))
                     (conj ret (sg/project seg))))))))))
 
-(defn process-segments [segments]
-  (let [segs
-        (reduce (fn [segs seg]
-                  (let [lst (peek segs)]
-                    (if (= (first seg) :points)
-                      (if (= (first lst) :points)
-                        (conj (pop segs) (with-meta
-                                           [:points (concat (second lst) (second seg))]
-                                           {:start-transform (-> lst meta :start-transform)
-                                            :end-transform (-> seg meta :end-transform)}))
-                        (conj segs seg))
-                      (if (= (first lst) :points)
-                        (conj (pop segs) (with-meta (m/polygon (second lst))
-                                           (meta lst)) seg)
-                        (conj segs seg)))))
-                []
-                segments)
-        lst (peek segs)]
-    (if (= (first lst) :points)
-      (conj (pop segs) (with-meta (m/polygon (second lst))
-                         (meta lst)))
-      segs)))
+(defn transform-segments-2
+  ([segments] (transform-segments segments m/union true))
+  ([segments join-op join-branch?]
+   (let [first-segment-data (meta (first segments))
+         start-tf (:start-transform first-segment-data)
+         inverse-tf (u/->inverse-scad-transform start-tf u/identity-mat)]
+     (loop [segment-data first-segment-data
+            [seg & segs] segments
+            ret []]
+       (let [{:keys [branch]} (meta seg)]
+         (if (nil? seg)
+           (with-meta
+             (if (not join-branch?) (inverse-tf (join-op ret)) (join-op ret))
+             (assoc segment-data
+                    :segments segments
+                    :start-transform start-tf))
+           (recur (meta seg)
+                  (cond-> segs
+                    branch (concat (->> branch ;; Needs re-write. Transform-segments needs to be state -> state,
+                                               ;; building up segments.
+                                        (map meta)
+                                        (map :models)
+                                        (mapcat vals)
+                                        (apply concat))))
+                  (if branch
+                    (conj ret (sg/project seg))
+                    (conj ret (sg/project seg))))))))))
 
-(defn ->model [models path-spec transforms name]
-  (let [segs (mapcat #(transform-segments % identity true)
-                     (vals models))
-        segments (->> segs
-                      (group-by (juxt (comp :order meta) (comp :mask? meta)))
-                      (sort-by key))]
-    (with-meta
-      (reduce (fn [ret [[_ mask?] models]]
-                (if mask?
-                  (m/difference ret (m/union models))
-                  (m/union ret (m/union models))))
-              (m/union)
-              segments)
-      {:segments segments
-       :transforms transforms
-       :name (or name "default")
-       :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
-       :models models
-       :path-spec path-spec})))
+(defn result-tree->model
+  [{:keys [models result path-spec transforms name] :as state}]
+  (let [f (fn walk
+            ([tree]
+             (if (keyword? tree)
+               (apply m/union (transform-segments (get models tree) identity true))
+               (case (first tree)
+                 ::union (apply m/union (map walk (next tree)))
+                 ::difference (apply m/difference (map walk (next tree)))
+                 ::intersection (apply m/intersection (map walk (next tree)))))))
+        ret (f result)]
+    (with-meta ret state)))
+
+(defn ->model [{:keys [models result path-spec transforms name] :as state}]
+  (if result
+    (result-tree->model state)
+    (let [segs (mapcat #(transform-segments % identity true)
+                       (vals models))
+          segments (->> segs
+                        (group-by (juxt (comp :order meta) (comp :mask? meta)))
+                        (sort-by key))]
+      (with-meta
+        (reduce (fn [ret [[_ mask?] models]]
+                  (if mask?
+                    (m/difference ret (m/union models))
+                    (m/union ret (m/union models))))
+                (m/union)
+                segments)
+        {:segments segments
+         :transforms transforms
+         :name (or name "default")
+         :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
+         :models models
+         :path-spec path-spec}))))
 
 (defn lookup-transform
   [model name]
@@ -144,14 +165,14 @@
    :scope []
    :index -1})
 
-(defn path
-  ([path-forms] (path default-state
+(defn path*
+  ([path-forms] (path* default-state
                       path-forms))
   ([state path-forms]
    (loop [{:keys [models index] :as state} state
-          [form & forms] path-forms]
+          [form & forms] (remove nil? path-forms)]
      (cond (nil? form)
-           (->model models path-forms (:transforms state) (:name state))
+           (->model (assoc state :path-spec path-forms))
 
            (sequential? form)
            (if (= (first form) ::segment)
@@ -162,6 +183,9 @@
              (let [args (parse-args form)
                    new-state (path-form (update state :index inc) args)]
                (recur new-state forms)))))))
+
+(defn path [& path-forms]
+  (path* path-forms))
 
 (defmethod path-form ::model
   [ret args]
@@ -188,14 +212,14 @@
   [{:keys [models index transforms] :as state} args]
   (let [from-model (:from args)
         model (get models from-model)
-        m (path (-> state
-                    (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
-                    (assoc :index -1)
-                    (update :scope conj index))
-                (::list args))]
+        m (path* (-> state
+                     (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
+                     (assoc :index -1)
+                     (update :scope conj index))
+                 (::list args))]
     (assoc state
            :models
-           (assoc models
+           (assoc (merge models (-> m meta :models))
                   from-model
                   (conj (pop model) (vary-meta (peek model) update :branch conj m)))
            :transforms (merge transforms (-> m meta :transforms)))))
@@ -213,7 +237,11 @@
                          namespace (->keyword namespace))]
     (update state :transforms assoc transform-name (:end-transform model-state))))
 
-(defn update-models [{:keys [models] :as state} {:keys [to gap skip op] :as args} f]
+(defmethod path-form ::result
+  [state {tree ::list}]
+  (assoc state :result (first tree)))
+
+(defn update-models [{:keys [models ignored-models] :as state} {:keys [to gap skip op] :as args} f]
   (let [gap-models (clojure.core/set
                     (if (boolean? gap)
                       (or to (keys models))
@@ -254,7 +282,13 @@
                                                 (dissoc mta :name))
                                         (> (count m) (count model))
                                         (dissoc :branch))))))]))
-                 (if to (select-keys models to) models))))))
+                 (reduce dissoc
+                         (if to (select-keys models to) models)
+                         ignored-models))))))
+
+(defmethod path-form ::ignore
+  [state {:keys [models]}]
+  (assoc state :ignored-models models))
 
 (defmacro def-segment-handler [key & func]
   `(defmethod path-form ~key
@@ -459,7 +493,7 @@
                    (m/difference m mask)
                    m)))
         tf (u/go-forward start-transform (cond-> length center (/ 2)))]
-    (conj ret (with-meta part (assoc ctx :end-transform tf)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms [start-transform tf])))))
 
 (def-segment-handler ::forward
   [ret ctx args]
@@ -690,17 +724,26 @@
 (defn minkowski [& args]
   `(::minkowski ~@args))
 
-(defn union [& args]
-  `(::union ~@args))
-
 (defn add-ns [& args]
   `(::add-ns ~@args))
 
 (defn forward-until [& args]
   `(::forward-until ~@args))
 
-(defn left-2d [& args]
-  `(::left-2d ~@args))
+(defn ignore [& args]
+  `(::ignore ~@args))
+
+(defn result [& args]
+  `(::result ~@args))
+
+(defn union [& args]
+  `(::union ~@args))
+
+(defn intersection [& args]
+  `(::intersection ~@args))
+
+(defn difference [& args]
+  `(::difference ~@args))
 
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at ::list]} (parse-args (list* :na args))]
@@ -738,11 +781,11 @@
           :else
           [args (vec (cons x xs))])))
 
-(defmacro defmodel [name & path]
-  (let [[opts path] (parse-path path)]
+(defmacro defmodel [name & path*]
+  (let [[opts path*] (parse-path path*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
-         (path (assoc default-state :name ~(str name)) ~path)))))
+         (path* (assoc default-state :name ~(str name)) ~path*)))))
 
 
 
@@ -751,15 +794,15 @@
 
 
 
-(defn path-points [model path]
-  (let [model (-> path meta :models model)]
+(defn path-points [model path*]
+  (let [model (-> path* meta :models model)]
     (for [seg model
           tf (->> seg meta :all-transforms (map u/translation-vector))]
       tf)))
 
-(defn path-models [path]
+(defn path-models [path*]
   (into {}
-        (for [[model-name model] (-> path meta :models)]
+        (for [[model-name model] (-> path* meta :models)]
           [model-name
            [(m/union)
             (with-meta
@@ -790,11 +833,11 @@
        :models models
        :path-spec path-spec})))
 
-(defmacro defpoly [name & path]
-  (let [[opts path] (parse-path path)]
+(defmacro defpoly [name & path*]
+  (let [[opts path*] (parse-path path*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
-         (let [p# (path (assoc default-state :name ~(str name)) ~path)
+         (let [p# (path* (assoc default-state :name ~(str name)) ~path*)
                m# (meta p#)]
            (-> p#
                (path-models)
