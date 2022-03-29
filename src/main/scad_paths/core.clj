@@ -130,9 +130,10 @@
         (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
 
 (defn normalize-segment [segment]
-  (if (sequential? (ffirst segment))
-    (first segment)
-    segment))
+  (remove nil?
+          (if (sequential? (ffirst segment))
+            (first segment)
+            segment)))
 
 (def default-state
   {:models {}
@@ -302,7 +303,7 @@
 
 (defn all-transforms [start-transform tf-fn curve-radius angle steps]
   (let [step-angle (/ angle steps)]
-    (take steps
+    (take (inc steps)
           (iterate
            (fn [transform]
              (let [d (u/bAc->a curve-radius step-angle curve-radius)
@@ -383,6 +384,7 @@
          :or {curve-radius (:curve-radius ctx)
               elevation 0
               gap gap}} args
+        face-number (or (:fn args) (:fn ctx))
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
                 (if (not angle)
@@ -390,15 +392,15 @@
                   angle))
         degrees (* angle 57.29578)
         [new-shape model]
-        (binding [m/*fn* (:fn ctx)]
+        (binding [m/*fn* face-number]
           (u/extrude-rotate {:angle degrees
-                             :face-number (:fn ctx)
+                             :face-number face-number
                              :elevation elevation
                              :model name
                              :curve-radius curve-radius
                              :step-fn step-fn}
                             shape))
-        part (binding [m/*fn* (:fn ctx)]
+        part (binding [m/*fn* face-number]
                (->> model
                     (m/translate [(- curve-radius) 0 0])
                     (m/rotatec [(/ u/pi 2) 0 (/ u/pi 2)])))
@@ -411,7 +413,7 @@
                                   (u/pitch (- a r))))
                             curve-radius
                             angle
-                            (/ (:fn ctx) 2))
+                            (/ face-number 2))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -425,13 +427,14 @@
   [ret {:keys [shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length]
          :or {curve-radius (:curve-radius ctx)}} args
+        face-number (or (:fn args) (:fn ctx))
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
                 (if (not angle)
                   (/ Math/PI 2)
                   angle))
         degrees  (* angle 57.29578)
-        part (binding [m/*fn* (:fn ctx)]
+        part (binding [m/*fn* face-number]
                (->> shape
                     (m/rotatec [0 0 (/ Math/PI 2)])
                     (m/translate [curve-radius 0 0])
@@ -446,7 +449,7 @@
                                   (u/pitch (- (- a r)))))
                             curve-radius
                             angle
-                            (/ (:fn ctx) 2))
+                            (/ face-number 2))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf  (-> start-transform
@@ -456,7 +459,8 @@
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
 (defn forward-impl* [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [{:keys [length model twist mask center]} args
+  (let [{:keys [length model twist mask center step-length axis]
+         :or {step-length length}} args
         shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
                 (new-fn shape (:fn args))
                 shape)
@@ -468,8 +472,12 @@
                  (if mask
                    (m/difference m mask)
                    m)))
-        tf (u/go-forward start-transform (cond-> length center (/ 2)))]
-    (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms [start-transform tf])))))
+        tf (u/go-forward start-transform (cond-> length center (/ 2)))
+        all-transforms (conj (vec (for [step (range (quot length step-length))]
+                                    (u/go-forward start-transform (* step step-length))))
+                             tf)]
+    (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms all-transforms)))))
+
 
 (def-segment-handler ::forward
   [ret ctx args]
@@ -525,11 +533,17 @@
     (conj other-forms new-segment)))
 
 (def-segment-handler ::translate
-  [ret {:keys [start-transform]} {:keys [x y z]}]
-  (let [tf (cond-> start-transform
-             x (u/go-forward x :x)
-             y (u/go-forward y :y)
-             z (u/go-forward z :z))]
+  [ret {:keys [start-transform]} {:keys [x y z global?]}]
+  (let [tf (if global?
+             (cond-> start-transform
+               x (u/set-translation x :x)
+               y (u/set-translation y :y)
+               z (u/set-translation z :z)
+               true (mat/to-nested-vectors))
+             (cond-> start-transform
+               x (u/go-forward x :x)
+               y (u/go-forward y :y)
+               z (u/go-forward z :z)))]
     (conj (pop ret) (vary-meta (peek ret) assoc :end-transform tf))))
 
 (defn rotate-impl
@@ -767,15 +781,6 @@
 
 
 
-
-
-
-(defn path-points [model path*]
-  (let [model (-> path* meta :models model)]
-    (for [seg model
-          tf (->> seg meta :all-transforms (map u/translation-vector))]
-      tf)))
-
 (defn path-models [path*]
   (into {}
         (for [[model-name model] (-> path* meta :models)]
@@ -789,6 +794,14 @@
                              (map (partial take 2)))]
                  tf))
               (-> model first meta))]])))
+
+(defn path-points [path*]
+  (vec (for [[_ model] (-> path* meta :models)
+             seg model
+             tf (->> seg meta :all-transforms
+                     (map u/translation-vector)
+                     (map (partial take 2)))]
+         tf)))
 
 (defn ->model-tmp [models path-spec transforms name]
   (let [segs (apply concat (vals models))
@@ -809,6 +822,20 @@
        :models models
        :path-spec path-spec})))
 
+(defmacro poly [& path*]
+  (let [[opts path*] (parse-path path*)]
+    `(let [p# (path* (assoc default-state :name ~(str name)) ~path*)
+          m# (meta p#)]
+      (-> p#
+          (path-models)
+          (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))
+
+(defmacro points [& path*]
+  (let [[opts path*] (parse-path path*)]
+    `(let [p# (path* (assoc default-state :name ~(str name)) ~path*)
+           m# (meta p#)]
+       (path-points p#))))
+
 (defmacro defpoly [name & path*]
   (let [[opts path*] (parse-path path*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
@@ -818,3 +845,6 @@
            (-> p#
                (path-models)
                (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))))
+
+(defn nearest-transform [model d axis]
+  )

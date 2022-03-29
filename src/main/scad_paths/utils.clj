@@ -113,6 +113,15 @@
      (mat/select m :all :butlast)
      (mat/column-matrix (mat/add tr (mat/conjoin-along 0 p 0))))))
 
+(defn set-translation
+  ([m v]
+   (mat/set-selection m 3 :butlast v))
+  ([m v axis]
+   (case axis
+     :x (mat/set-selection m 0 3 v)
+     :y (mat/set-selection m 1 3 v)
+     :z (mat/set-selection m 2 3 v))))
+
 (defn invert [m]
   (mat/inverse (mat/matrix m)))
 
