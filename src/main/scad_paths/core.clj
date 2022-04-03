@@ -1,4 +1,5 @@
 (ns scad-paths.core
+  (:refer-clojure :exclude [set])
   (:require
    [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
@@ -65,9 +66,9 @@
              (if (keyword? tree)
                (apply m/union (get segments tree))
                (case (first tree)
-                 ::union (apply m/union (map walk (next tree)))
-                 ::difference (apply m/difference (map walk (next tree)))
-                 ::intersection (apply m/intersection (map walk (next tree)))))))
+                 ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
+                 ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
+                 ::intersection (apply m/intersection (sequence (comp (remove nil?) (map walk)) (next tree)))))))
         ret (f result)]
     (with-meta ret state)))
 
@@ -795,12 +796,12 @@
                  tf))
               (-> model first meta))]])))
 
-(defn path-points [path*]
+(defn path-points [path* select-fn]
   (vec (for [[_ model] (-> path* meta :models)
              seg model
              tf (->> seg meta :all-transforms
                      (map u/translation-vector)
-                     (map (partial take 2)))]
+                     (map select-fn))]
          tf)))
 
 (defn ->model-tmp [models path-spec transforms name]
@@ -831,10 +832,18 @@
           (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))
 
 (defmacro points [& path*]
-  (let [[opts path*] (parse-path path*)]
+  (let [[opts path*] (parse-path path*)
+        axes (or (:axes opts) [:x :y])
+        sym (gensym "tv-")
+        clauses (for [axis axes]
+                  (case axis
+                    :x `(nth ~sym 0)
+                    :y `(nth ~sym 1)
+                    :z `(nth ~sym 2)))]
     `(let [p# (path* (assoc default-state :name ~(str name)) ~path*)
            m# (meta p#)]
-       (path-points p#))))
+       (path-points p# (fn [~sym]
+                         (vector ~@clauses))))))
 
 (defmacro defpoly [name & path*]
   (let [[opts path*] (parse-path path*)]
