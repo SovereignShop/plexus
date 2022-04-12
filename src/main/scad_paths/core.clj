@@ -698,7 +698,11 @@
   `(::segment ~@args))
 
 (defn to [& args]
-  `(::to ~@args))
+  (let [[opts args] (parse-path args)
+        path* (map (fn [[x & xs]]
+                     (list* x :to (:models opts) xs))
+                   path*)]
+    (segment path*)))
 
 (defn mask [& args]
   `(::model ~@(conj (vec args) :mask? true)))
