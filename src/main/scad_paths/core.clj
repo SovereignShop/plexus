@@ -12,6 +12,18 @@
 
 (defmulti path-form (fn [_ args] (:op args)))
 
+(defn parse-path [path-spec]
+  (loop [[x & xs] path-spec
+         args {}]
+    (cond (nil? x)
+          [args nil]
+
+          (keyword? x)
+          (recur (next xs) (assoc args x (first xs)))
+
+          :else
+          [args (vec (cons x xs))])))
+
 (defn unnest [m]
   (if (and (sequential? m)
            (contains? #{:union :difference :intersection} (first m)))
@@ -697,11 +709,11 @@
 (defn segment [& args]
   `(::segment ~@args))
 
-(defn to [& args]
-  (let [[opts args] (parse-path args)
+(defn to [& p]
+  (let [[opts parsed-path] (parse-path p)
         path* (map (fn [[x & xs]]
                      (list* x :to (:models opts) xs))
-                   path*)]
+                   parsed-path)]
     (segment path*)))
 
 (defn mask [& args]
@@ -740,6 +752,8 @@
 (defn difference [& args]
   `(::difference ~@args))
 
+
+
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at ::list]} (parse-args (list* :na args))]
     (assert (or angles distances))
@@ -763,18 +777,6 @@
                          (translate axis distance)
                          (add-ns :namespace namespace)
                          (segment list))))))))
-
-(defn parse-path [path-spec]
-  (loop [[x & xs] path-spec
-         args {}]
-    (cond (nil? x)
-          [args nil]
-
-          (keyword? x)
-          (recur (next xs) (assoc args x (first xs)))
-
-          :else
-          [args (vec (cons x xs))])))
 
 (defmacro defmodel [name & path*]
   (let [[opts path*] (parse-path path*)]
