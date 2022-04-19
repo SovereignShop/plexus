@@ -166,13 +166,13 @@
   {:models {}
    :transforms {}
    :scope []
-   :offset 0
+   :curve-offset 0
    :index -1})
 
 (defn path*
   ([path-forms] (path* nil path-forms))
   ([state path-forms]
-   (loop [state (merge default-state state)
+   (loop [{:keys [models index] :as state} (merge default-state state)
           [form & forms] (remove nil? path-forms)]
      (cond (nil? form)
            (->model (assoc state :path-spec path-forms))
@@ -188,7 +188,8 @@
                (recur new-state forms)))))))
 
 (defn path [& path-forms]
-  (path* path-forms))
+  (let [[opts path_] (parse-path path-forms)]
+    (path* opts path_)))
 
 (defmethod path-form ::model
   [ret args]
@@ -210,9 +211,7 @@
       (-> ret
           (update :models assoc model-name [(with-meta (m/union)
                                               (-> model
-                                                  (assoc :offset (:offset ret))
-                                                  (update :start-transform u/go-forward (:offset ret) :x)
-                                                  (update :end-transform u/go-forward (:offset ret) :x)))])
+                                                  (assoc :curve-offset (:curve-offset ret))))])
           (assoc :last-model model-name)))))
 
 (defmethod path-form ::branch
@@ -334,10 +333,10 @@
 
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
- #dbg (let [{:keys [curve-radius angle side-length offset]
+  (let [{:keys [curve-radius angle side-length curve-offset]
          :or {curve-radius (:curve-radius ctx)
-              offset (:offset ctx)}} args
-        curve-radius (+ curve-radius offset)
+              curve-offset (:curve-offset ctx)}} args
+        curve-radius (+ curve-radius curve-offset)
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
                 (if (not angle)
@@ -376,10 +375,10 @@
 
 (def-segment-handler ::right
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length offset]
+  (let [{:keys [curve-radius angle side-length curve-offset]
          :or {curve-radius (:curve-radius ctx)
-              offset (:offset ctx)}} args
-        curve-radius (- offset curve-radius)
+              curve-offset (:curve-offset ctx)}} args
+        curve-radius  (- curve-radius curve-offset)
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
                 (if (not angle)
