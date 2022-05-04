@@ -519,9 +519,8 @@
                           (= axis :y) (u/rotate :x (/ Math/PI 2)))
         tf (-> start-transform
                (u/go-forward (cond-> length center (/ 2)) axis))
-        all-transforms (conj (vec (for [step (range (quot length step-length))]
-                                    (u/go-forward new-start-transform (* step step-length) axis)))
-                             tf)]
+        all-transforms (vec (for [step (range (quot length step-length))]
+                              (u/go-forward new-start-transform (* step step-length) axis)))]
     (conj ret (with-meta part (assoc ctx
                                      :start-transform new-start-transform
                                      :end-transform tf

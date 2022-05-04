@@ -227,7 +227,7 @@
         side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
                          [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))]
                      [v3 v4 v2 v1])]
-    (m/polyhedron (sequence (comp cat (map (fn [p] (map #(format "%.3f" %) p)))) polys)
+    (m/polyhedron (sequence cat polys)
                   (list* bottom-face
                          (rseq top-face)
                          side-faces))))
