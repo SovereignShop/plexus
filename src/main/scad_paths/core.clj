@@ -293,8 +293,7 @@
                                     (fn [mta]
                                       (cond-> (if (:name new-args)
                                                 (assoc mta :name (:name new-args))
-                                                mta
-                                                #_(dissoc mta :name))
+                                                mta)
                                         (> (count m) (count model))
                                         (dissoc :branch))))))]))
                  (reduce dissoc
@@ -313,7 +312,6 @@
 (def-segment-handler ::set
   [ret _ args]
   (conj (pop ret) (vary-meta (peek ret) merge (dissoc args :op))))
-
 
 (defn left-curve-points [curve-radius curve-angle face-number]
   (let [step-size (/ curve-angle face-number)]
@@ -515,12 +513,13 @@
                    (m/difference m mask)
                    m)))
         new-start-transform (cond-> start-transform
-                          (= axis :x) (u/rotate :y (/ Math/PI 2))
-                          (= axis :y) (u/rotate :x (/ Math/PI 2)))
+                              (= axis :x) (u/rotate :y (/ Math/PI 2))
+                              (= axis :y) (u/rotate :x (- (/ Math/PI 2))))
         tf (-> start-transform
                (u/go-forward (cond-> length center (/ 2)) axis))
-        all-transforms (vec (for [step (range (quot length step-length))]
-                              (u/go-forward new-start-transform (* step step-length) axis)))]
+        all-transforms (conj (vec (for [step (range (quot length step-length))]
+                                    (u/go-forward new-start-transform (* step step-length) axis)))
+                             tf)]
     (conj ret (with-meta part (assoc ctx
                                      :start-transform new-start-transform
                                      :end-transform tf
@@ -697,6 +696,11 @@
                       (transform-segments hull-segments u/iso-hull false))]
     (conj other-forms new-segment)))
 
+(def-segment-handler ::import
+  [ret ctx {:keys [stl] :as args}]
+  (let [model (m/import stl)]
+    (conj ret (with-meta model (meta (peek ret))))))
+
 (defn extrude-to [& opts]
   `(::extrude-to ~@opts))
 
@@ -796,6 +800,9 @@
 
 (defn iso-hull [& args]
   `(::iso-hull ~@args))
+
+(defn import [& args]
+  `(::import ~@args))
 
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at ::list]} (parse-args (list* :na args))]

@@ -225,8 +225,9 @@
         top-face (subvec indices (- n-indices poly-res) n-indices)
         iter (apply mapv list (partition poly-res indices))
         side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
-                         [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))]
-                     [v3 v4 v2 v1])]
+                         [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))
+                         face [[v3 v4 v2] [v3 v2 v1]]]
+                     face)]
     (m/polyhedron (sequence cat polys)
                   (list* bottom-face
                          (rseq top-face)
