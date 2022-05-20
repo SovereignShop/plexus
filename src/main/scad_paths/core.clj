@@ -495,7 +495,7 @@
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
 (defn forward-impl* [ret {:keys [fn shape start-transform step-length n-steps] :as ctx} args]
-  (let [{:keys [x y length model twist mask center step-length n-steps]
+  (let [{:keys [x y length model twist mask center step-length n-steps branch?]
          :or {step-length step-length
               n-steps n-steps}} args
         axis (cond x :x y :y :else :z)
@@ -520,10 +520,10 @@
         all-transforms (conj (vec (for [step (range (quot length step-length))]
                                     (u/go-forward new-start-transform (* step step-length) axis)))
                              tf)]
-    (conj ret (with-meta part (assoc ctx
-                                     :start-transform new-start-transform
-                                     :end-transform tf
-                                     :all-transforms all-transforms)))))
+    (conj ret (with-meta part (cond-> (assoc ctx
+                                             :start-transform new-start-transform
+                                             :all-transforms all-transforms)
+                                (not branch?) (assoc :end-transform tf))))))
 
 (def-segment-handler ::forward
   [ret ctx args]
