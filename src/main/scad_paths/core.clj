@@ -701,6 +701,27 @@
   (let [model (m/import stl)]
     (conj ret (with-meta model (meta (peek ret))))))
 
+(def-segment-handler ::show-coordinate-frame
+  [ret
+   {:keys [end-transform
+           start-transform]}
+   {:keys [radius length]
+    :or {length 20 radius 1}
+    :as args}]
+  (let [arrow (m/cylinder radius length :center false)
+        x-arrow (->> arrow
+                     (m/rotate [0 (/ Math/PI 2) 0])
+                     (m/color [1 0 0]))
+        y-arrow (->> arrow
+                     (m/rotate [(- (/ Math/PI 2)) 0 0])
+                     (m/color [0 1 0]))
+        z-arrow (->> arrow
+                     (m/color [0 0 1]))
+        frame (m/union x-arrow y-arrow z-arrow)]
+    (conj ret (with-meta frame (assoc (meta (peek ret))
+                                      :start-transform end-transform
+                                      :end-transform end-transform)))))
+
 (defn extrude-to [& opts]
   `(::extrude-to ~@opts))
 
@@ -803,6 +824,9 @@
 
 (defn import [& args]
   `(::import ~@args))
+
+(defn show-coordinate-frame [& args]
+  `(::show-coordinate-frame ~@args))
 
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at ::list]} (parse-args (list* :na args))]
