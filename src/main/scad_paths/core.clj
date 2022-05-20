@@ -79,6 +79,8 @@
   [{:keys [models result] :as state}]
   (let [segs (mapcat #(transform-segments % identity true)
                      (vals models))
+        frame-segs (when-let [frames (:coordinate-frames state)]
+                     (transform-segments frames identity true))
         segments (group-by (comp :name meta) segs)
         f (fn walk
             ([tree]
@@ -88,7 +90,8 @@
                  ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::intersection (apply m/intersection (sequence (comp (remove nil?) (map walk)) (next tree)))))))
-        ret (f result)]
+        ret (cond-> (f result)
+              frame-segs (m/union frame-segs))]
     (with-meta ret
       (assoc state
              :segment-groups (group-by #(get (meta %) :name :unnamed) segs)))))
@@ -98,16 +101,19 @@
     (result-tree->model state)
     (let [segs (mapcat #(transform-segments % identity true)
                        (vals models))
+          frame-segs (when-let [frames (:coordinate-frames state)]
+                       (transform-segments frames identity true))
           segments (->> segs
                         (group-by (juxt (comp :order meta) (comp :mask? meta)))
                         (sort-by key))]
       (with-meta
-        (reduce (fn [ret [[_ mask?] models]]
-                  (if mask?
-                    (m/difference ret (m/union models))
-                    (m/union ret (m/union models))))
-                (m/union)
-                segments)
+        (cond-> (reduce (fn [ret [[_ mask?] models]]
+                          (if mask?
+                            (m/difference ret (m/union models))
+                            (m/union ret (m/union models))))
+                        (m/union)
+                        segments)
+          frame-segs (m/union frame-segs))
         {:segments segments
          :transforms transforms
          :name (or name "default")
@@ -312,6 +318,39 @@
 (def-segment-handler ::set
   [ret _ args]
   (conj (pop ret) (vary-meta (peek ret) merge (dissoc args :op))))
+
+(defmethod path-form ::show-coordinate-frame
+  [state
+   {:keys [radius length frame-offset to]
+    :or {length 20 radius 1 frame-offset [0 0 0]}
+    :as args}]
+  (let [models (cond-> (:models state)
+                 to (select-keys to))
+
+        arrow (m/cylinder radius length :center false)
+        x-arrow (->> arrow
+                     (m/rotate [0 (/ Math/PI 2) 0])
+                     (m/color [1 0 0]))
+        y-arrow (->> arrow
+                     (m/rotate [(- (/ Math/PI 2)) 0 0])
+                     (m/color [0 1 0]))
+        z-arrow (->> arrow
+                     (m/color [0 0 1]))
+        frame (->> (m/union x-arrow y-arrow z-arrow)
+                   (m/translate frame-offset))]
+    (reduce (fn [state model]
+              (let [m (meta (peek model))
+                    {:keys [end-transform]} m]
+                (update state
+                        :coordinate-frames
+                        conj
+                        (with-meta frame (assoc m
+                                                :type :coordinate-frame
+                                                :start-transform end-transform
+                                                :end-transform end-transform)))))
+            state
+            (vals models))))
+
 
 (defn left-curve-points [curve-radius curve-angle face-number]
   (let [step-size (/ curve-angle face-number)]
@@ -700,27 +739,6 @@
   [ret ctx {:keys [stl] :as args}]
   (let [model (m/import stl)]
     (conj ret (with-meta model (meta (peek ret))))))
-
-(def-segment-handler ::show-coordinate-frame
-  [ret
-   {:keys [end-transform
-           start-transform]}
-   {:keys [radius length]
-    :or {length 20 radius 1}
-    :as args}]
-  (let [arrow (m/cylinder radius length :center false)
-        x-arrow (->> arrow
-                     (m/rotate [0 (/ Math/PI 2) 0])
-                     (m/color [1 0 0]))
-        y-arrow (->> arrow
-                     (m/rotate [(- (/ Math/PI 2)) 0 0])
-                     (m/color [0 1 0]))
-        z-arrow (->> arrow
-                     (m/color [0 0 1]))
-        frame (m/union x-arrow y-arrow z-arrow)]
-    (conj ret (with-meta frame (assoc (meta (peek ret))
-                                      :start-transform end-transform
-                                      :end-transform end-transform)))))
 
 (defn extrude-to [& opts]
   `(::extrude-to ~@opts))
