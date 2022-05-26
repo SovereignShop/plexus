@@ -103,9 +103,13 @@
                        (vals models))
           frame-segs (when-let [frames (:coordinate-frames state)]
                        (transform-segments frames identity true))
-          segments (->> segs
-                        (group-by (juxt (comp :order meta) (comp :mask? meta)))
-                        (sort-by key))]
+          segment-groups (->> segs
+                              (group-by (juxt
+                                         (fn [x]
+                                           (let [m (meta x)]
+                                             (or (:segment-order m) (:order m))))
+                                         (comp :mask? meta))))
+          segments (sort-by key segment-groups)]
       (with-meta
         (cond-> (reduce (fn [ret [[_ mask?] models]]
                           (if mask?
@@ -345,6 +349,7 @@
                         :coordinate-frames
                         conj
                         (with-meta frame (assoc m
+                                                :mask? false
                                                 :type :coordinate-frame
                                                 :start-transform end-transform
                                                 :end-transform end-transform)))))
@@ -534,7 +539,7 @@
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
 (defn forward-impl* [ret {:keys [fn shape start-transform step-length n-steps] :as ctx} args]
-  (let [{:keys [x y length model twist mask center step-length n-steps branch?]
+  (let [{:keys [x y length model twist mask center step-length n-steps branch? order]
          :or {step-length step-length
               n-steps n-steps}} args
         axis (cond x :x y :y :else :z)
@@ -560,6 +565,7 @@
                                     (u/go-forward new-start-transform (* step step-length) axis)))
                              tf)]
     (conj ret (with-meta part (cond-> (assoc ctx
+                                             :segment-order order
                                              :start-transform new-start-transform
                                              :all-transforms all-transforms)
                                 (not branch?) (assoc :end-transform tf))))))
