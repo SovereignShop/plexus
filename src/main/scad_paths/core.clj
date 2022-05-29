@@ -375,7 +375,7 @@
 
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset]
+  (let [{:keys [curve-radius angle side-length curve-offset tangent]
          :or {curve-radius (:curve-radius ctx)
               curve-offset (:curve-offset ctx)}} args
         n-faces (or (:fn args) (:fn ctx))
@@ -411,6 +411,7 @@
     (conj ret (with-meta part (assoc ctx
                                      :end-transform tf
                                      :all-transforms tfs
+                                     :tangent tangent
                                      :curve-radius curve-radius
                                      :curve-origin (-> start-transform
                                                        (u/yaw (- (/ Math/PI 2)))
@@ -539,7 +540,7 @@
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
 (defn forward-impl* [ret {:keys [fn shape start-transform step-length n-steps] :as ctx} args]
-  (let [{:keys [x y length model twist mask center step-length n-steps branch? order]
+  (let [{:keys [x y length model twist mask center step-length n-steps branch? order tangent]
          :or {step-length step-length
               n-steps n-steps}} args
         axis (cond x :x y :y :else :z)
@@ -566,6 +567,7 @@
                              tf)]
     (conj ret (with-meta part (cond-> (assoc ctx
                                              :segment-order order
+                                             :tangent tangent
                                              :start-transform new-start-transform
                                              :all-transforms all-transforms)
                                 (not branch?) (assoc :end-transform tf))))))
@@ -903,9 +905,13 @@
   ([path* select-fn]
    (vec (for [[_ model] (-> path* meta :models)
               seg model
-              tf (->> seg meta :all-transforms
+              :let [m (meta seg)
+                    tangent (:tangent m)
+                    tfs (:all-transforms m)]
+              tf (->> tfs
                       (map u/translation-vector)
-                      (map select-fn))]
+                      (map select-fn)
+                      (map #(with-meta % {:tangent tangent})))]
           tf))))
 
 (defn ->model-tmp [models path-spec transforms name]
