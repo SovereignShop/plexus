@@ -204,7 +204,7 @@
             (m/union)
             (m/with-fn face-number))])))
 
-(defn iso-hull [segs]
+#_(defn iso-hull [segs]
   (let [polys (map (fn [seg]
                      (let [m (meta seg)
                            tf (:start-transform m)
@@ -232,3 +232,32 @@
                   (list* bottom-face
                          (rseq top-face)
                          side-faces))))
+
+(defn iso-hull [polys]
+  (let [first-poly (first polys)
+        poly-res (count first-poly)
+        n-indices (* (count polys) poly-res)
+        indices (vec (range n-indices))
+        bottom-face (take poly-res indices)
+        top-face (subvec indices (- n-indices poly-res) n-indices)
+        iter (apply mapv list (partition poly-res indices))
+        side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
+                         [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))]
+                     [v3 v4 v2 v1])]
+    (m/polyhedron (sequence cat polys)
+                  (list* bottom-face
+                         (rseq top-face)
+                         side-faces))))
+
+(defn iso-hull-segments [segs]
+  (iso-hull (map (fn [seg]
+                     (let [m (meta seg)
+                           tf (:start-transform m)
+                           shape (:shape m)
+                           pts (:points (second shape))]
+                       (for [[x y] pts]
+                         (-> tf
+                             (go-forward x :x)
+                             (go-forward y :y)
+                             (translation-vector)))))
+                 segs)))
