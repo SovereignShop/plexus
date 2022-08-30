@@ -82,17 +82,21 @@
         frame-segs (when-let [frames (:coordinate-frames state)]
                      (transform-segments frames identity true))
         segments (group-by (comp :name meta) segs)
+        modules (reduce-kv (fn [ret name_ seg]
+                             (assoc ret name_ (m/define-module name_ (apply m/union seg))))
+                           {}
+                           segments)
         f (fn walk
             ([tree]
              (if (keyword? tree)
-               (apply m/union (get segments tree))
+               (m/call-module tree)
                (case (first tree)
                  ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::intersection (apply m/intersection (sequence (comp (remove nil?) (map walk)) (next tree)))))))
         ret (cond-> (f result)
               frame-segs (m/union frame-segs))]
-    (with-meta ret
+    (with-meta (conj (mapv val (sort-by key modules)) ret)
       (assoc state
              :segment-groups (group-by #(get (meta %) :name :unnamed) segs)))))
 
@@ -108,22 +112,29 @@
                                          (fn [x]
                                            (let [m (meta x)]
                                              (or (:segment-order m) (:order m))))
-                                         (comp :mask? meta))))
-          segments (sort-by key segment-groups)]
+                                         (comp :mask? meta)
+                                         (comp :name meta))))
+          segments (sort-by key segment-groups)
+          modules (mapv (fn [[[_ _ name_] seg]]
+                          (m/define-module name_ (apply m/union seg)))
+                        segments)]
       (with-meta
-        (cond-> (reduce (fn [ret [[_ mask?] models]]
-                          (if mask?
-                            (m/difference ret (m/union models))
-                            (m/union ret (m/union models))))
-                        (m/union)
-                        segments)
-          frame-segs (m/union frame-segs))
+        (conj modules
+              (cond-> (reduce (fn [ret [[_ mask? name_] _]]
+                                (if mask?
+                                  (m/difference ret (m/call-module name_))
+                                  (m/union ret (m/call-module name_))))
+                              (m/union)
+                              segments)
+                frame-segs (m/union frame-segs)))
         {:segments segments
          :transforms transforms
          :name (or name "default")
          :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
          :models models
          :path-spec path-spec}))))
+
+(defn write-modules [])
 
 (defn lookup-transform
   [model name]

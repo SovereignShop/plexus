@@ -16,3 +16,8 @@
   (hull :to [:body]))
 #+end_src
  Works if you branch from :mask.
+* Improvements
+**  Caching
+
+- Cache each body
+- cache segment
