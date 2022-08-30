@@ -1,6 +1,7 @@
 (ns scad-paths.core
   (:refer-clojure :exclude [set])
   (:require
+   [clojure.string :as string]
    [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
    [scad-clj.scad :as s]
@@ -8,7 +9,8 @@
    [scad-paths.segment :as sg]
    [scad-paths.triangles :as triangles]
    [scad-paths.utils :as u]
-   [scad-clj.model :as m]))
+   [scad-clj.model :as m]
+   [camel-snake-kebab.core :as csk]))
 
 (defmulti path-form (fn [_ args] (:op args)))
 
@@ -83,13 +85,13 @@
                      (transform-segments frames identity true))
         segments (group-by (comp :name meta) segs)
         modules (reduce-kv (fn [ret name_ seg]
-                             (assoc ret name_ (m/define-module name_ (apply m/union seg))))
+                             (assoc ret name_ (m/define-module (csk/->snake_case name_) (apply m/union seg))))
                            {}
                            segments)
         f (fn walk
             ([tree]
              (if (keyword? tree)
-               (m/call-module tree)
+               (m/call-module (csk/->snake_case tree))
                (case (first tree)
                  ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
@@ -105,6 +107,8 @@
     (result-tree->model state)
     (let [segs (mapcat #(transform-segments % identity true)
                        (vals models))
+          make-module-name (fn [order mask? name_]
+                             (string/join "_" [(clojure.core/name (csk/->snake_case name_)) (if mask? "mask" "body") order]))
           frame-segs (when-let [frames (:coordinate-frames state)]
                        (transform-segments frames identity true))
           segment-groups (->> segs
@@ -115,15 +119,15 @@
                                          (comp :mask? meta)
                                          (comp :name meta))))
           segments (sort-by key segment-groups)
-          modules (mapv (fn [[[_ _ name_] seg]]
-                          (m/define-module name_ (apply m/union seg)))
+          modules (mapv (fn [[[order mask? name_] seg]]
+                          (m/define-module (make-module-name order mask? name_) (apply m/union seg)))
                         segments)]
       (with-meta
         (conj modules
-              (cond-> (reduce (fn [ret [[_ mask? name_] _]]
+              (cond-> (reduce (fn [ret [[order mask? name_] _]]
                                 (if mask?
-                                  (m/difference ret (m/call-module name_))
-                                  (m/union ret (m/call-module name_))))
+                                  (m/difference ret (m/call-module (make-module-name order mask? name_)))
+                                  (m/union ret (m/call-module (make-module-name order mask? name_)))))
                               (m/union)
                               segments)
                 frame-segs (m/union frame-segs)))
