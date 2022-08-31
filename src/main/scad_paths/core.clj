@@ -77,38 +77,71 @@
                     (conj ret (sg/project seg))
                     (conj ret (sg/project seg))))))))))
 
+(defn make-module-name
+  [namespace_ name_]
+  (string/join
+   "_"
+   [(.replaceAll (csk/->snake_case (str namespace_))
+                 "\\." "_")
+    (csk/->snake_case (name name_))]))
+
+(def default-model
+  {:curve-radius 7
+   :shape nil
+   :fn 10
+   :order 0
+   :mask? false
+   :name :default
+   :models {}
+   :start-transform u/identity-mat
+   :end-transform u/identity-mat})
+
 (defn result-tree->model
-  [{:keys [models result] :as state}]
+  [{:keys [models result namespace] :as state}]
   (let [segs (mapcat #(transform-segments % identity true)
                      (vals models))
         frame-segs (when-let [frames (:coordinate-frames state)]
                      (transform-segments frames identity true))
         segments (group-by (comp :name meta) segs)
-        modules (reduce-kv (fn [ret name_ seg]
-                             (assoc ret name_ (m/define-module (csk/->snake_case name_) (apply m/union seg))))
-                           {}
-                           segments)
         f (fn walk
             ([tree]
              (if (keyword? tree)
-               (m/call-module (csk/->snake_case tree))
+               (m/call-module (make-module-name namespace tree))
                (case (first tree)
                  ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
                  ::intersection (apply m/intersection (sequence (comp (remove nil?) (map walk)) (next tree)))))))
-        ret (cond-> (f result)
-              frame-segs (m/union frame-segs))]
-    (with-meta (conj (mapv val (sort-by key modules)) ret)
-      (assoc state
-             :segment-groups (group-by #(get (meta %) :name :unnamed) segs)))))
+        ret (cond-> (f (:expr result))
+              frame-segs (m/union frame-segs))
+        modules (reduce-kv (fn [ret name_ seg]
+                             (assoc ret name_ (m/define-module (make-module-name namespace name_) (apply m/union seg))))
+                           {}
+                           (assoc segments (:name result) [ret]))]
+    (-> state
+        (update :modules merge modules)
+        (assoc :result ret)
+        (assoc :segment-groups (group-by #(get (meta %) :name :unnamed) segs))
+        (update :models assoc (:name result) [(with-meta ret default-model)]))))
 
-(defn ->model [{:keys [models result path-spec transforms name] :as state}]
+(defn ->model [{:keys [models result path-spec transforms name namespace] :as state}]
   (if result
-    (result-tree->model state)
+    (let [state
+          (reduce (fn [state [_ result]]
+                    (result-tree->model (assoc state :result result)))
+                  state
+                  (sort-by (comp - first key) result))
+          modules (:modules state)]
+      (with-meta (conj (vec (vals (sort-by key modules)))
+                       (:result state))
+        state))
     (let [segs (mapcat #(transform-segments % identity true)
                        (vals models))
           make-module-name (fn [order mask? name_]
-                             (string/join "_" [(clojure.core/name (csk/->snake_case name_)) (if mask? "mask" "body") order]))
+                             (string/join "_" [(.replaceAll (csk/->snake_case (str namespace))
+                                                            "\\." "_")
+                                               (clojure.core/name (csk/->snake_case name_))
+                                               (if mask? "mask" "body")
+                                               order]))
           frame-segs (when-let [frames (:coordinate-frames state)]
                        (transform-segments frames identity true))
           segment-groups (->> segs
@@ -132,6 +165,7 @@
                               segments)
                 frame-segs (m/union frame-segs)))
         {:segments segments
+         :namespace namespace
          :transforms transforms
          :name (or name "default")
          :segment-groups (group-by #(get (meta %) :name :unnamed) segs)
@@ -159,17 +193,6 @@
 
 (defn new-fn [model n]
   (postwalk (partial replace-fn n) model))
-
-(def default-model
-  {:curve-radius 7
-   :shape nil
-   :fn 10
-   :order 0
-   :mask? false
-   :name :default
-   :models {}
-   :start-transform u/identity-mat
-   :end-transform u/identity-mat})
 
 (defn parse-args [form]
   (loop [[arg & args] (next form)
@@ -249,10 +272,10 @@
                      (update :scope conj index))
                  (::list args))]
     (assoc state
-           :models
-           (assoc models
-                  from-model
-                  (conj (pop model) (vary-meta (peek model) update :branch conj m)))
+           :modules (-> m meta :modules)
+           :models (assoc models
+                          from-model
+                          (conj (pop model) (vary-meta (peek model) update :branch conj m)))
            :transforms (merge transforms (-> m meta :transforms)))))
 
 (defn ->keyword [namespace name*]
@@ -276,8 +299,9 @@
     (update state :models assoc model-name (:shape model-state))))
 
 (defmethod path-form ::result
-  [state {tree ::list}]
-  (assoc state :result (first tree)))
+  [state args]
+  (let [result (:result state)]
+    (assoc state :result (assoc result [(count result) (:name args)] args))))
 
 (defn update-models [{:keys [models ignored-models] :as state} {:keys [to gap skip op] :as args} f]
   (let [gap-models (clojure.core/set
@@ -897,7 +921,10 @@
   (let [[opts path*] (parse-path path*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
-         (path* (assoc default-state :name ~(str name)) ~path*)))))
+         (path* (assoc default-state
+                       :name ~(str name)
+                       :namespace ~(str *ns* "." name))
+                ~path*)))))
 
 
 (defn path-models [path*]
