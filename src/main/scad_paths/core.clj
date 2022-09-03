@@ -96,6 +96,9 @@
    :start-transform u/identity-mat
    :end-transform u/identity-mat})
 
+(defn path? [x]
+  (-> x meta :path-spec))
+
 (defn result-tree->model
   [{:keys [models result namespace] :as state}]
   (let [segs (mapcat #(transform-segments % identity true)
@@ -787,6 +790,29 @@
   (let [model (m/import stl)]
     (conj ret (with-meta model (meta (peek ret))))))
 
+(def-segment-handler ::slice
+  [ret ctx {:keys [length] :as args :or {length 0.01}}]
+  (let [seg (peek ret)
+        m (meta seg)
+        tf (-> (:end-transform m)
+               (u/go-backward length))
+        new-m (assoc m
+                     :start-transform tf
+                     :end-transform (:end-transform m))
+        new-seg (with-meta
+                  (->> (m/square 1000 1000)
+                       (m/extrude-linear {:height length :center false}))
+                  new-m)
+        new-seg (with-meta
+                  (sg/normalise
+                   (with-meta
+                     (m/intersection
+                      (sg/project new-seg)
+                      (sg/project seg))
+                     new-m))
+                  new-m)]
+    (conj ret new-seg)))
+
 (defn extrude-to [& opts]
   `(::extrude-to ~@opts))
 
@@ -884,6 +910,56 @@
 (defn difference [& args]
   `(::difference ~@args))
 
+(defn slice [& args]
+  `(::slice ~@args))
+
+(defn get-models [args]
+  (for [arg args]
+    (if (path? arg)
+      (-> arg meta :result)
+      (m/call-module
+       (make-module-name (-> arg second meta :namespace)
+                         (first arg))))))
+
+(defn subtract [a & args]
+  (let [all-modules (reduce (fn [ret arg]
+                              (if (path? arg)
+                                (merge ret (-> arg meta :modules))
+                                (merge ret (-> arg second meta :modules))))
+                            {}
+                            (cons a args))
+        all-results (get-models (cons a args))
+        result (apply m/difference all-results)]
+    (with-meta
+      (conj (vec (vals all-modules)) result)
+      (assoc (meta a) :modules all-modules :result result))))
+
+(defn intersect [a & args]
+  (let [all-modules (reduce (fn [ret arg]
+                              (if (path? arg)
+                                (merge ret (-> arg meta :modules))
+                                (merge ret (-> arg second meta :modules))))
+                            {}
+                            (cons a args))
+        all-results (get-models (cons a args))
+        result (apply m/intersection all-results)]
+    (with-meta
+      (conj (vec (vals all-modules)) result)
+      (assoc (meta a) :modules all-modules :result result))))
+
+(defn join [a & args]
+  (let [all-modules (reduce (fn [ret arg]
+                              (if (path? arg)
+                                (merge ret (-> arg meta :modules))
+                                (merge ret (-> arg second meta :modules))))
+                            {}
+                            (cons a args))
+        all-results (get-models (cons a args))
+        result (apply m/union all-results)]
+    (with-meta
+      (conj (vec (vals all-modules)) result)
+      (assoc (meta a) :modules all-modules :result result))))
+
 (defn iso-hull [& args]
   `(::iso-hull ~@args))
 
@@ -925,6 +1001,17 @@
                        :name ~(str name)
                        :namespace ~(str *ns* "." name))
                 ~path*)))))
+
+(defmacro defmodel2 [& args]
+  (let [[opts path*] (parse-path path*)
+        name (:name opts)
+        result (:result opts)]
+    `(binding [m/*fn* ~(get opts :fn 10)]
+       (def ~name
+         (path* (assoc default-state
+                       :name ~(str name)
+                       :namespace ~(str *ns* "." name))
+                ~(cons result path*))))))
 
 
 (defn path-models [path*]
