@@ -117,7 +117,9 @@
         ret (cond-> (f (:expr result))
               frame-segs (m/union frame-segs))
         modules (reduce-kv (fn [ret name_ seg]
-                             (assoc ret name_ (m/define-module (make-module-name namespace name_) (apply m/union seg))))
+                             (if (= name_ :default)
+                               ret
+                               (assoc ret name_ (m/define-module (make-module-name namespace name_) (apply m/union seg)))))
                            {}
                            (assoc segments (:name result) [ret]))]
     (-> state
@@ -218,7 +220,8 @@
    :transforms {}
    :scope []
    :curve-offset 0
-   :index -1})
+   :index -1
+   :default-model default-model})
 
 (defn path*
   ([path-forms] (path* nil path-forms))
@@ -246,7 +249,9 @@
   [ret args]
   (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
                      (meta (peek m)))
-        model (into (or (dissoc last-model :shape) default-model) args)
+        model (into (or (dissoc last-model :shape)
+                        (:default-model ret))
+                    args)
         model (cond-> model
                 (:shape model) (update :shape new-fn (or (:fn args) (:fn model))))
         model-name (:name model)
@@ -268,12 +273,15 @@
 (defmethod path-form ::branch
   [{:keys [models index transforms] :as state} args]
   (let [from-model (:from args)
+        with-models (:with args)
         model (get models from-model)
-        m (path* (-> state
-                     (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
-                     (assoc :index -1)
-                     (update :scope conj index))
-                 (::list args))]
+        model-data (meta (peek model))
+        branch-state (cond-> (-> state
+                                 (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
+                                 (assoc :index -1 :default-model model-data)
+                                 (update :scope conj index))
+                       with-models (update :models select-keys with-models))
+        m (path* branch-state (::list args))]
     (assoc state
            :modules (-> m meta :modules)
            :models (assoc models
