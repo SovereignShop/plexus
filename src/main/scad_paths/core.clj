@@ -292,6 +292,27 @@
 (defn ->keyword [namespace name*]
   (keyword (name namespace) (name name*)))
 
+(defn generate-shape [shape state]
+  (let [models (:models state)
+        lookup-crossection (fn [e]
+                             (let [model (e models)
+                                   m (meta (peek model))
+                                   shape_ (:shape m)
+                                   tf (:start-transform m)
+                                   rot (u/get-roll tf)]
+                               (->> shape_
+                                    (m/rotatec [0 0 rot])
+                                    #_(m/translate (subvec (u/translation-vector tf) 0 2)))))
+        walk (fn walk [e]
+               (if (keyword? e)
+                 (lookup-crossection e)
+                 (case (first e)
+                   ::intersection (apply m/intersection (map walk (next e)))
+                   ::union (apply m/union (map walk (next e)))
+                   ::difference (apply m/difference (map walk (next e)))
+                   e)))]
+    (walk shape)))
+
 (defmethod path-form ::save-transform
   [state args]
   (let [model-name (:model args)
@@ -314,7 +335,7 @@
   (let [result (:result state)]
     (assoc state :result (assoc result [(count result) (:name args)] args))))
 
-(defn update-models [{:keys [models ignored-models] :as state} {:keys [to gap skip op] :as args} f]
+(defn update-models [{:keys [models ignored-models] :as state} {:keys [to gap] :as args} f]
   (let [gap-models (clojure.core/set
                     (if (boolean? gap)
                       (or to (keys models))
@@ -327,7 +348,9 @@
             (map (fn [[name model]]
                    (let [m-meta (meta (peek model))
                          new-args (if (:shape args)
-                                    (update args :shape new-fn (:fn m-meta))
+                                    (-> args
+                                        (update :shape generate-shape state)
+                                        (update :shape new-fn (:fn m-meta)))
                                     args)
                          m (f (if (:fn new-args)
                                 (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn new-args)))
@@ -335,8 +358,7 @@
                               (cond-> (assoc m-meta
                                              :op (:op new-args)
                                              :name name
-                                             :start-transform
-                                             (:end-transform (meta (peek model))))
+                                             :start-transform (:end-transform (meta (peek model))))
                                 (:name new-args) (assoc :name (:name new-args))
                                 (:fn new-args) (update :shape new-fn (:fn new-args))
                                 (:order new-args) (assoc :order (:order new-args)))
@@ -371,7 +393,9 @@
 
 (def-segment-handler ::set
   [ret _ args]
-  (conj (pop ret) (vary-meta (peek ret) merge (dissoc args :op))))
+  (conj (pop ret) (vary-meta (peek ret) merge
+                             (-> args
+                                 (dissoc :op)))))
 
 (defmethod path-form ::show-coordinate-frame
   [state

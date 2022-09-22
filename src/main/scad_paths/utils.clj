@@ -159,6 +159,11 @@
 
 (def identity-mat [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 0]])
 
+(defn get-roll [m]
+  (let [rm (rotation-matrix m)
+        [angle _] (rotation-axis-and-angle [1 0 0] (nth rm 0) [0 0 1])]
+    angle))
+
 (defn distance [a b]
   (Math/cbrt
    (apply + (mat/mul (mat/sub a b)
@@ -178,7 +183,6 @@
             (m/translate translation)
             (m/rotatev angle ortho)
             (m/rotatev (- angle-2) ortho-2))))))
-
 
 (defn extrude-rotate [{:keys [angle elevation step-fn model curve-radius face-number] :or {elevation 0} :as args} block]
   (if (and (not step-fn) (= 0 elevation))
