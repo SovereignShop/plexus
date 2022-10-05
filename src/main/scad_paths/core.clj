@@ -99,6 +99,23 @@
 (defn path? [x]
   (-> x meta :path-spec))
 
+(defn parse-args [form]
+  (loop [[arg & args] (next form)
+         kvs (transient {:op (first form)})]
+    (if (nil? arg)
+      (persistent! kvs)
+      (if (keyword? arg)
+        (recur (next args)
+               (assoc! kvs arg (first args)))
+        (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
+
+(defn normalize-segment [segment]
+  (remove nil?
+          (if (and (sequential? (first segment))
+                   (sequential? (ffirst segment)))
+            (first segment)
+            segment)))
+
 (defn result-tree->model
   [{:keys [models result namespace] :as state}]
   (let [segs (mapcat #(transform-segments % identity true)
@@ -111,9 +128,12 @@
              (if (keyword? tree)
                (m/call-module (make-module-name namespace tree))
                (case (first tree)
-                 ::union (apply m/union (sequence (comp (remove nil?) (map walk)) (next tree)))
-                 ::difference (apply m/difference (sequence (comp (remove nil?) (map walk)) (next tree)))
-                 ::intersection (apply m/intersection (sequence (comp (remove nil?) (map walk)) (next tree)))))))
+                 ::translate (let [opts (parse-args tree)
+                                   tv [(:x opts 0) (:y opts 0) (:z opts 0)]]
+                               (apply m/translate tv (sequence (map walk) (normalize-segment (::list opts)))))
+                 ::union (apply m/union (sequence (map walk) (normalize-segment (next tree))))
+                 ::difference (apply m/difference (sequence (map walk) (normalize-segment (next tree))))
+                 ::intersection (apply m/intersection (sequence (map walk) (normalize-segment (next tree))))))))
         ret (cond-> (f (:expr result))
               frame-segs (m/union frame-segs))
         modules (reduce-kv (fn [ret name_ seg]
@@ -199,22 +219,6 @@
 (defn new-fn [model n]
   (postwalk (partial replace-fn n) model))
 
-(defn parse-args [form]
-  (loop [[arg & args] (next form)
-         kvs (transient {:op (first form)})]
-    (if (nil? arg)
-      (persistent! kvs)
-      (if (keyword? arg)
-        (recur (next args)
-               (assoc! kvs arg (first args)))
-        (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
-
-(defn normalize-segment [segment]
-  (remove nil?
-          (if (sequential? (ffirst segment))
-            (first segment)
-            segment)))
-
 (def default-state
   {:models {}
    :transforms {}
@@ -245,8 +249,7 @@
   (let [[opts path_] (parse-path path-forms)]
     (path* opts path_)))
 
-(defmethod path-form ::model
-  [ret args]
+(defn model-impl* [ret args]
   (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
                      (meta (peek m)))
         model (into (or (dissoc last-model :shape)
@@ -269,6 +272,10 @@
                                               (-> model
                                                   (assoc :curve-offset (:curve-offset ret))))])
           (assoc :last-model model-name)))))
+
+(defmethod path-form ::model
+  [ret args]
+  (model-impl* ret args))
 
 (defmethod path-form ::branch
   [{:keys [models index transforms] :as state} args]
@@ -1127,6 +1134,3 @@
            (-> p#
                (path-models)
                (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))))
-
-(defn nearest-transform [model d axis]
-  )
