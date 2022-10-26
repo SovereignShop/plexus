@@ -96,6 +96,9 @@
    :start-transform u/identity-mat
    :end-transform u/identity-mat})
 
+(defn seg [model & args]
+  (with-meta model (reduce conj default-model (partition 2 args))))
+
 (defn path? [x]
   (-> x meta :path-spec))
 
@@ -116,9 +119,32 @@
             (first segment)
             segment)))
 
+(defn translate-segment [segment {:keys [x y z global?]}]
+  (let [{:keys [start-transform] :as m} (meta segment)
+        tf (if global?
+             (cond-> start-transform
+               x (u/set-translation x :x)
+               y (u/set-translation y :y)
+               z (u/set-translation z :z)
+               true (mat/to-nested-vectors))
+             (cond-> start-transform
+               x (u/go-forward x :x)
+               y (u/go-forward y :y)
+               z (u/go-forward z :z)))]
+    (vary-meta segment assoc :start-transform tf)))
+
+(defn rotate-segment
+  [segment {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
+  (let [{:keys [start-transform]} (meta segment)
+        axis (if x :x (if y :y (if z :z axis)))
+        angle (or x y z angle)
+        seg (vary-meta segment assoc :start-transform (u/rotate start-transform axis angle))]
+    seg))
+
 (defn result-tree->model
-  [{:keys [models result namespace] :as state}]
-  (let [segs (mapcat #(transform-segments % identity true)
+  [{:keys [models result namespace branch-models] :as state}]
+  (let [model-table (merge models branch-models)
+        segs (mapcat #(transform-segments % identity true)
                      (vals models))
         frame-segs (when-let [frames (:coordinate-frames state)]
                      (transform-segments frames identity true))
@@ -126,16 +152,37 @@
         f (fn walk
             ([tree]
              (if (keyword? tree)
-               (m/call-module (make-module-name namespace tree))
+               (let [m (meta (or (second (tree model-table))
+                                 (first (tree model-table))))]
+                 (with-meta
+                   (sg/normalise (with-meta (m/call-module (make-module-name namespace tree)) m))
+                   (assoc m
+                          :start-transform u/identity-mat
+                          :end-transform u/identity-mat
+                          :old-model m)))
                (case (first tree)
+                 ::model (walk (second tree))
                  ::translate (let [opts (parse-args tree)
-                                   tv [(:x opts 0) (:y opts 0) (:z opts 0)]]
-                               (apply m/translate tv (sequence (map walk) (normalize-segment (::list opts)))))
-                 ::union (apply m/union (sequence (map walk) (normalize-segment (next tree))))
-                 ::difference (apply m/difference (sequence (map walk) (normalize-segment (next tree))))
-                 ::intersection (apply m/intersection (sequence (map walk) (normalize-segment (next tree))))))))
-        ret (cond-> (f (:expr result))
-              frame-segs (m/union frame-segs))
+                                   segments (::list opts)]
+                               (translate-segment (walk (first segments)) opts))
+                 ::rotate (let [opts (parse-args tree)]
+                            (rotate-segment (walk (first (::list opts))) opts))
+                 (let [segs (sequence (comp (map walk) #_(map sg/project #_(fn [seg]
+                                                              (if-let [old-model (:old-model (meta seg))]
+                                                                (sg/project (with-meta seg old-model))
+                                                                (sg/project seg)))))
+                                      (normalize-segment (next tree)))
+                       m (meta (last segs))
+                       new-m (assoc default-model :old-model (:old-model m))]
+                   (case (first tree)
+                     ::hull (with-meta (apply m/hull segs) new-m)
+                     ::union (with-meta (apply m/union segs) new-m)
+                     ::difference (with-meta (apply m/difference segs) new-m)
+                     ::intersection (with-meta (apply m/intersection segs) new-m)))))))
+        ret  (cond-> #_(sg/project) (let [x #_(sg/project) (f (:expr result))]
+                                    (with-meta x (or (:old-model (meta x))  (meta x))))
+               frame-segs (m/union frame-segs)
+               true (vary-meta assoc :name (:name result)))
         modules (reduce-kv (fn [ret name_ seg]
                              (if (= name_ :default)
                                ret
@@ -144,11 +191,11 @@
                            (assoc segments (:name result) [ret]))]
     (-> state
         (update :modules merge modules)
-        (assoc :result ret)
+        (assoc :result (vary-meta ret dissoc :old-model))
         (assoc :segment-groups (group-by #(get (meta %) :name :unnamed) segs))
-        (update :models assoc (:name result) [(with-meta ret default-model)]))))
+        (update :models assoc (:name result) [(vary-meta ret dissoc :old-model)]))))
 
-(defn ->model [{:keys [models result path-spec transforms name namespace] :as state}]
+(defn ->model [{:keys [models result path-spec transforms name namespace branch-models] :as state}]
   (if result
     (let [state
           (reduce (fn [state [_ result]]
@@ -190,6 +237,7 @@
                               segments)
                 frame-segs (m/union frame-segs)))
         {:segments segments
+         :branch-models branch-models
          :namespace namespace
          :transforms transforms
          :name (or name "default")
@@ -285,12 +333,15 @@
         model-data (meta (peek model))
         branch-state (cond-> (-> state
                                  (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
+                                 (dissoc :result)
                                  (assoc :index -1 :default-model model-data)
                                  (update :scope conj index))
                        with-models (update :models select-keys with-models))
-        m (path* branch-state (::list args))]
+        m (path* branch-state (::list args))
+        new-m (meta m)]
     (assoc state
            :modules (-> m meta :modules)
+           :branch-models (merge (:branch-models state) (:models new-m) (:branch-models new-m))
            :models (assoc models
                           from-model
                           (conj (pop model) (vary-meta (peek model) update :branch conj m)))
