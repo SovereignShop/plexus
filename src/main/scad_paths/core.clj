@@ -167,9 +167,9 @@
                                (translate-segment (walk (first segments)) opts))
                  ::rotate (let [opts (parse-args tree)]
                             (rotate-segment (walk (first (::list opts))) opts))
-                 (let [segs (sequence (comp (map walk) #_(map sg/project #_(fn [seg]
+                 (let [segs (sequence (comp (map walk) (map (fn [seg]
                                                               (if-let [old-model (:old-model (meta seg))]
-                                                                (sg/project (with-meta seg old-model))
+                                                                (sg/project (with-meta (sg/project seg) old-model))
                                                                 (sg/project seg)))))
                                       (normalize-segment (next tree)))
                        m (meta (last segs))
@@ -179,8 +179,8 @@
                      ::union (with-meta (apply m/union segs) new-m)
                      ::difference (with-meta (apply m/difference segs) new-m)
                      ::intersection (with-meta (apply m/intersection segs) new-m)))))))
-        ret  (cond-> #_(sg/project) (let [x #_(sg/project) (f (:expr result))]
-                                    (with-meta x (or (:old-model (meta x))  (meta x))))
+        ret  (cond-> (sg/project (let [x (sg/project (f (:expr result)))]
+                                   (with-meta x (or (:old-model (meta x))  (meta x)))))
                frame-segs (m/union frame-segs)
                true (vary-meta assoc :name (:name result)))
         modules (reduce-kv (fn [ret name_ seg]
