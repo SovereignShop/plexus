@@ -42,34 +42,41 @@
   (-> segment meta :segments (nth n)))
 
 (defn normalise
-  "Send segment from its transform frame to it's global origin."
-  ([segment]
-   (if (= (get-transform segment) u/identity-mat)
-     segment
-     (let [translation (mat/mmul -1 (get-translation segment))
-           a (u/rotation-matrix u/identity-mat)
-           b (get-rotation segment)
-           [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-           c (u/rotate33 a ortho angle)
-           [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
-       (->> segment
-            (m/translate translation)
-            (m/rotatev angle ortho)
-            (m/rotatev (- angle-2) ortho-2))))))
+  "Send segment from global origin to its transform frame."
+  [segment]
+  (let [met (meta segment)]
+    (if (:projected met)
+      segment
+      (let [m (get-transform segment)
+            translation (u/translation-vector m)
+            a (get-rotation segment)
+            b (u/rotation-matrix u/identity-mat)
+            [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
+            c (u/rotate33 a ortho angle)
+            [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
+        (with-meta
+          (->> segment
+               (m/translate (mat/mul -1 translation))
+               (m/rotatev angle ortho)
+               (m/rotatev (- angle-2) ortho-2))
+          (dissoc met :projected))))))
 
 (defn project
   "Send segment from global origin to its transform frame."
   [segment]
-  (let [m (get-transform segment)
-        translation (u/translation-vector m)
-        a (u/rotation-matrix u/identity-mat)
-        b (get-rotation segment)
-        [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-        c (u/rotate33 a ortho angle)
-        [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
-    (with-meta
-      (->> segment
-           (m/rotatev angle ortho)
-           (m/rotatev (- angle-2) ortho-2)
-           (m/translate translation))
-      (meta segment))))
+  (let [met (meta segment)]
+    (if (:projected met)
+      segment
+      (let [m (get-transform segment)
+            translation (u/translation-vector m)
+            a (u/rotation-matrix u/identity-mat)
+            b (get-rotation segment)
+            [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
+            c (u/rotate33 a ortho angle)
+            [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
+        (with-meta
+          (->> segment
+               (m/rotatev angle ortho)
+               (m/rotatev (- angle-2) ortho-2)
+               (m/translate translation))
+          (assoc met :projected true))))))

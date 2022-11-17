@@ -131,14 +131,14 @@
                x (u/go-forward x :x)
                y (u/go-forward y :y)
                z (u/go-forward z :z)))]
-    (vary-meta segment assoc :start-transform tf)))
+    (vary-meta segment assoc :start-transform tf :projected false)))
 
 (defn rotate-segment
   [segment {:keys [axis angle x y z] :or {axis [0 0 1] angle (/ Math/PI 2)}}]
   (let [{:keys [start-transform]} (meta segment)
         axis (if x :x (if y :y (if z :z axis)))
         angle (or x y z angle)
-        seg (vary-meta segment assoc :start-transform (u/rotate start-transform axis angle))]
+        seg (vary-meta segment assoc :start-transform (u/rotate start-transform axis angle) :projected false)]
     seg))
 
 (defn result-tree->model
@@ -180,7 +180,7 @@
                      ::difference (with-meta (apply m/difference segs) new-m)
                      ::intersection (with-meta (apply m/intersection segs) new-m)))))))
         ret  (cond-> (sg/project (let [x (sg/project (f (:expr result)))]
-                                   (with-meta x (or (:old-model (meta x))  (meta x)))))
+                                   (with-meta x (or (:old-model (meta x)) (meta x)))))
                frame-segs (m/union frame-segs)
                true (vary-meta assoc :name (:name result)))
         modules (reduce-kv (fn [ret name_ seg]
