@@ -143,7 +143,7 @@
 
 (defn result-tree->model
   [{:keys [models result namespace branch-models] :as state}]
-  (let [model-table (merge models branch-models)
+  (let [model-table (merge branch-models models)
         segs (mapcat #(transform-segments % identity true)
                      (vals models))
         frame-segs (when-let [frames (:coordinate-frames state)]
@@ -334,6 +334,27 @@
         branch-state (cond-> (-> state
                                  (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
                                  (dissoc :result)
+                                 (assoc :index -1 :default-model model-data)
+                                 (update :scope conj index))
+                       with-models (update :models select-keys with-models))
+        m (path* branch-state (::list args))
+        new-m (meta m)]
+    (assoc state
+           :modules (-> m meta :modules)
+           :branch-models (merge (:branch-models state) (:models new-m) (:branch-models new-m))
+           :models (assoc models
+                          from-model
+                          (conj (pop model) (vary-meta (peek model) update :branch conj m)))
+           :transforms (merge transforms (-> m meta :transforms)))))
+
+#_(defmethod path-form ::branch
+  [{:keys [models index transforms] :as state} args]
+  (let [from-model (:from args)
+        with-models (:with args)
+        model (get models from-model)
+        model-data (meta (peek model))
+        branch-state (cond-> (-> state
+                                 (update :models assoc from-model (conj (pop model) (vary-meta (peek model) dissoc :branch)))
                                  (assoc :index -1 :default-model model-data)
                                  (update :scope conj index))
                        with-models (update :models select-keys with-models))
