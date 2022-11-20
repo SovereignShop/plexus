@@ -1141,17 +1141,24 @@
 
 (defn path-points
   ([path*]
-   (path-points path* identity))
-  ([path* select-fn]
+   (path-points path* identity nil))
+  ([path* select-fn meta-props]
    (vec (for [[_ model] (-> path* meta :models)
-              seg model
+              [i seg] (map-indexed list model)
               :let [m (meta seg)
                     tangent (:tangent m)
-                    tfs (:all-transforms m)]
+                    tfs (if (zero? i)
+                          (:all-transforms m)
+                          (next (:all-transforms m)))
+                    meta-fn (if meta-props
+                              (fn [x]
+                                (with-meta x (assoc (select-keys m meta-props) :tangent tangent)))
+                               (fn [x]
+                                 (with-meta x {:tangent tangent})))]
               tf (->> tfs
                       (map u/translation-vector)
                       (map select-fn)
-                      (map #(with-meta % {:tangent tangent})))]
+                      (map meta-fn))]
           tf))))
 
 (defn ->model-tmp [models path-spec transforms name]
@@ -1184,6 +1191,7 @@
 (defmacro points [& path*]
   (let [[opts path*] (parse-path path*)
         axes (or (:axes opts) [:x :y])
+        meta-props (:meta-props opts)
         sym (gensym "tv-")
         clauses (for [axis axes]
                   (case axis
@@ -1194,7 +1202,7 @@
            m# (meta p#)]
        (with-meta
          (path-points p# (fn [~sym]
-                           (vector ~@clauses)))
+                           (vector ~@clauses)) ~meta-props)
          m#))))
 
 (defmacro defpoly [name & path*]
