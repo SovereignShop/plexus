@@ -5,7 +5,6 @@
    [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
    [scad-clj.scad :as s]
-   [scad-paths.transforms :as tr]
    [scad-paths.segment :as sg]
    [scad-paths.triangles :as triangles]
    [scad-paths.utils :as u]
@@ -1144,7 +1143,7 @@
    (path-points path* identity nil))
   ([path* select-fn meta-props]
    (vec (for [[_ model] (-> path* meta :models)
-              [i seg] (map-indexed list model)
+              [i seg] (map-indexed list (remove #(= (-> % meta :op) ::model) model))
               :let [m (meta seg)
                     tangent (:tangent m)
                     tfs (if (zero? i)
