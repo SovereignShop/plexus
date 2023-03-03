@@ -709,11 +709,12 @@
                  (if mask
                    (m/difference m mask)
                    m)))
-        new-start-transform (cond-> start-transform
+        new-start-transform #dbg (cond-> start-transform
                               (= axis :x) (u/rotate :y (/ Math/PI 2))
                               (= axis :y) (u/rotate :x (- (/ Math/PI 2))))
-        tf (-> start-transform
-               (u/go-forward (cond-> length center (/ 2)) axis))
+        tf (cond-> start-transform
+             true (u/go-forward (cond-> length center (/ 2)) axis)
+             twist (u/rotate :z twist))
         all-transforms (conj (vec (for [step (range (quot length step-length))]
                                     (u/go-forward new-start-transform (* step step-length) axis)))
                              tf)]
