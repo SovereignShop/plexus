@@ -709,7 +709,7 @@
                  (if mask
                    (m/difference m mask)
                    m)))
-        new-start-transform #dbg (cond-> start-transform
+        new-start-transform (cond-> start-transform
                               (= axis :x) (u/rotate :y (/ Math/PI 2))
                               (= axis :y) (u/rotate :x (- (/ Math/PI 2))))
         tf (cond-> start-transform
@@ -893,7 +893,7 @@
   (let [hull-segments (into () (take n-segments) (map peek (iterate pop ret)))
         other-forms (nth (iterate pop ret) n-segments)
         new-segment (binding [m/*fn* (or (:fn args) (:fn ctx))]
-                      (transform-segments hull-segments u/iso-hull false))]
+                      (transform-segments hull-segments u/iso-hull-segments false))]
     (conj other-forms new-segment)))
 
 (def-segment-handler ::import
