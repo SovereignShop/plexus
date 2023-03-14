@@ -80,9 +80,13 @@
   [namespace_ name_]
   (string/join
    "_"
-   [(.replaceAll (csk/->snake_case (str namespace_))
-                 "\\." "_")
-    (csk/->snake_case (name name_))]))
+   (remove nil?
+           [(.replaceAll (csk/->snake_case (str namespace_))
+                         "\\." "_")
+            (when (and (keyword? name_) (namespace name_))
+              (.replaceAll (csk/->snake_case (str (namespace name_)))
+                           "\\." "_"))
+            (csk/->snake_case (name name_))])))
 
 (def default-model
   {:curve-radius 7
@@ -208,11 +212,15 @@
     (let [segs (mapcat #(transform-segments % identity true)
                        (vals models))
           make-module-name (fn [order mask? name_]
-                             (string/join "_" [(.replaceAll (csk/->snake_case (str namespace))
-                                                            "\\." "_")
-                                               (clojure.core/name (csk/->snake_case name_))
-                                               (if mask? "mask" "body")
-                                               order]))
+                             (string/join "_" (remove nil?
+                                                      [(.replaceAll (csk/->snake_case (str namespace))
+                                                                    "\\." "_")
+                                                      #dbg (when (and (keyword? name) (namespace name))
+                                                         (.replaceAll (csk/->snake_case (str (clojure.core/namespace name)))
+                                                                      "\\." "_"))
+                                                       (csk/->snake_case (clojure.core/name name_))
+                                                       (if mask? "mask" "body")
+                                                       order])))
           frame-segs (when-let [frames (:coordinate-frames state)]
                        (transform-segments frames identity true))
           segment-groups (->> segs
@@ -527,7 +535,7 @@
 
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset tangent]
+  (let [{:keys [curve-radius angle side-length curve-offset tangent gap]
          :or {curve-radius (:curve-radius ctx)
               curve-offset (:curve-offset ctx)}} args
         n-faces (or (:fn args) (:fn ctx))
@@ -545,15 +553,17 @@
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
                     (m/rotatec [(/ Math/PI 2) 0 0])))
-        tfs (all-transforms start-transform
-                            (fn [tf r d a]
-                              (-> tf
-                                  (u/yaw (- r))
-                                  (u/go-forward d)
-                                  (u/yaw (- (- a r)))))
-                            curve-radius
-                            angle
-                            (/ n-faces 2))
+        tfs (if (= gap true)
+              []
+              (all-transforms start-transform
+                              (fn [tf r d a]
+                                (-> tf
+                                    (u/yaw (- r))
+                                    (u/go-forward d)
+                                    (u/yaw (- (- a r)))))
+                              curve-radius
+                              angle
+                              (/ n-faces 2)))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -571,7 +581,7 @@
 
 (def-segment-handler ::right
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset]
+  (let [{:keys [curve-radius angle side-length curve-offset gap]
          :or {curve-radius (:curve-radius ctx)
               curve-offset (:curve-offset ctx)}} args
         n-faces (or (:fn args) (:fn ctx))
@@ -588,15 +598,17 @@
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
                     (m/rotatec [(- (/ u/pi 2)) u/pi 0])))
-        tfs (all-transforms start-transform
-                            (fn [tf r d a]
-                              (-> tf
-                                  (u/yaw r)
-                                  (u/go-forward d)
-                                  (u/yaw (- a r))))
-                            curve-radius
-                            angle
-                            (/ n-faces 2))
+        tfs (if (= gap true)
+              []
+              (all-transforms start-transform
+                              (fn [tf r d a]
+                                (-> tf
+                                    (u/yaw r)
+                                    (u/go-forward d)
+                                    (u/yaw (- a r))))
+                              curve-radius
+                              angle
+                              (/ n-faces 2)))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
