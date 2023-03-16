@@ -523,21 +523,24 @@
       [(- (* curve-radius (Math/cos x)) curve-radius)
        (* curve-radius (Math/sin x))])))
 
-(defn all-transforms [start-transform tf-fn curve-radius angle steps]
+(defn all-transforms [start-transform tf-fn curve-radius angle steps step-fn]
   (let [step-angle (/ angle steps)]
-    (take (inc steps)
-          (iterate
-           (fn [transform]
-             (let [d (u/bAc->a curve-radius step-angle curve-radius)
-                   r (- (/ Math/PI 2) (/ (- Math/PI step-angle) 2))]
-               (tf-fn transform r d step-angle)))
-           start-transform))))
+    (map-indexed (fn [i tf]
+                   (step-fn tf i))
+                 (take (inc steps)
+                       (iterate
+                        (fn [transform]
+                          (let [d (u/bAc->a curve-radius step-angle curve-radius)
+                                r (- (/ Math/PI 2) (/ (- Math/PI step-angle) 2))]
+                            (tf-fn transform r d step-angle)))
+                        start-transform)))))
 
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset tangent gap]
+  (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
-              curve-offset (:curve-offset ctx)}} args
+              curve-offset (:curve-offset ctx)
+              transform-step-fn (fn [tf angle] tf)}} args
         n-faces (or (:fn args) (:fn ctx))
         curve-radius (+ curve-radius curve-offset)
         angle (if (and side-length (not angle))
@@ -556,14 +559,15 @@
         tfs (if (= gap true)
               []
               (all-transforms start-transform
-                              (fn [tf r d a]
-                                (-> tf
-                                    (u/yaw (- r))
-                                    (u/go-forward d)
-                                    (u/yaw (- (- a r)))))
-                              curve-radius
-                              angle
-                              (/ n-faces 2)))
+                                (fn [tf r d a i]
+                                  (-> tf
+                                      (u/yaw (- r))
+                                      (u/go-forward d)
+                                      (u/yaw (- (- a r)))))
+                                curve-radius
+                                angle
+                                (/ n-faces 2)
+                                transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -581,9 +585,10 @@
 
 (def-segment-handler ::right
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset gap]
+  (let [{:keys [curve-radius angle side-length curve-offset gap transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
-              curve-offset (:curve-offset ctx)}} args
+              curve-offset (:curve-offset ctx)
+              transform-step-fn (fn [tf angle] tf)}} args
         n-faces (or (:fn args) (:fn ctx))
         curve-radius  (- curve-radius curve-offset)
         angle (if (and side-length (not angle))
@@ -601,14 +606,15 @@
         tfs (if (= gap true)
               []
               (all-transforms start-transform
-                              (fn [tf r d a]
-                                (-> tf
-                                    (u/yaw r)
-                                    (u/go-forward d)
-                                    (u/yaw (- a r))))
-                              curve-radius
-                              angle
-                              (/ n-faces 2)))
+                                (fn [tf r d a]
+                                  (-> tf
+                                      (u/yaw r)
+                                      (u/go-forward d)
+                                      (u/yaw (- a r))))
+                                curve-radius
+                                angle
+                                (/ n-faces 2)
+                                transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -625,10 +631,12 @@
 
 (def-segment-handler ::up
   [ret {:keys [shape gap start-transform name] :as ctx} args]
-  (let [{:keys [curve-radius angle gap side-length elevation step-fn]
+  (let [{:keys [curve-radius angle gap side-length elevation step-fn
+                transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
               elevation 0
-              gap gap}} args
+              gap gap
+              transform-step-fn (fn [tf i] tf)}} args
         face-number (or (:fn args) (:fn ctx))
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
@@ -658,7 +666,8 @@
                                   (u/pitch (- a r))))
                             curve-radius
                             angle
-                            (/ face-number 2))
+                            (/ face-number 2)
+                            transform-step-fn)
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -670,8 +679,9 @@
 
 (def-segment-handler ::down
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length]
-         :or {curve-radius (:curve-radius ctx)}} args
+  (let [{:keys [curve-radius angle side-length transform-step-fn]
+         :or {curve-radius (:curve-radius ctx)
+              transform-step-fn (fn [tf i])}} args
         face-number (or (:fn args) (:fn ctx))
         angle (if (and side-length (not angle))
                 (triangles/abc->A side-length curve-radius curve-radius)
@@ -694,7 +704,8 @@
                                   (u/pitch (- (- a r)))))
                             curve-radius
                             angle
-                            (/ face-number 2))
+                            (/ face-number 2)
+                            transform-step-fn)
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf  (-> start-transform
