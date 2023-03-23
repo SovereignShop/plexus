@@ -516,7 +516,6 @@
             state
             (vals models))))
 
-
 (defn left-curve-points [curve-radius curve-angle face-number]
   (let [step-size (/ curve-angle face-number)]
     (for [x (range 0 curve-angle step-size)]
@@ -559,7 +558,7 @@
         tfs (if (= gap true)
               []
               (all-transforms start-transform
-                                (fn [tf r d a i]
+                                (fn [tf r d a]
                                   (-> tf
                                       (u/yaw (- r))
                                       (u/go-forward d)
