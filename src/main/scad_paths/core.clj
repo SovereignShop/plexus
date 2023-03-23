@@ -713,17 +713,19 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
-(defn forward-impl* [ret {:keys [fn shape start-transform step-length n-steps] :as ctx} args]
-  (let [{:keys [x y length model twist mask center step-length n-steps branch? order tangent]
+(defn forward-impl* [ret {:keys [shape start-transform step-length n-steps] :as ctx} args]
+  (let [{:keys [x y length model twist mask center step-length n-steps branch? order tangent
+                transform-step-fn]
          :or {step-length step-length
-              n-steps n-steps}} args
+              n-steps n-steps
+              transform-step-fn (fn [tf i] tf)}} args
         axis (cond x :x y :y :else :z)
         length (or length x y (:z args))
         step-length (or step-length (if n-steps (/ length n-steps) length))
         shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
                 (new-fn shape (:fn args))
                 shape)
-        part (m/with-fn fn
+        part (m/with-fn (or (:fn args) (:fn ctx))
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
                        (->> shape
@@ -738,7 +740,8 @@
              true (u/go-forward (cond-> length center (/ 2)) axis)
              twist (u/rotate :z twist))
         all-transforms (conj (vec (for [step (range (quot length step-length))]
-                                    (u/go-forward new-start-transform (* step step-length) axis)))
+                                    (-> (u/go-forward new-start-transform (* step step-length) axis)
+                                        (transform-step-fn step))))
                              tf)]
     (conj ret (with-meta part (cond-> (assoc ctx
                                              :segment-order order
