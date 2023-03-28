@@ -132,6 +132,14 @@
                    (Math/pow c 2))
                 (* 2 b c (Math/cos A)))))
 
+(defn curve [tf curve-radius curve-angle]
+  (let [d (bAc->a curve-radius curve-angle curve-radius)
+        r (- (/ Math/PI 2) (/ (- Math/PI curve-angle) 2))]
+    (-> tf
+        (yaw r)
+        (go-forward d)
+        (yaw (- curve-angle r)))))
+
 (defn angle-between [a b]
   (Math/acos (/ (mat/dot a b) (* ( mat/magnitude a) (mat/magnitude b)))))
 

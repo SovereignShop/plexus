@@ -534,6 +534,7 @@
                             (tf-fn transform r d step-angle)))
                         start-transform)))))
 
+
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn]
@@ -558,15 +559,15 @@
         tfs (if (= gap true)
               []
               (all-transforms start-transform
-                                (fn [tf r d a]
-                                  (-> tf
-                                      (u/yaw (- r))
-                                      (u/go-forward d)
-                                      (u/yaw (- (- a r)))))
-                                curve-radius
-                                angle
-                                (/ n-faces 2)
-                                transform-step-fn))
+                              (fn [tf r d a]
+                                (-> tf
+                                    (u/yaw (- r))
+                                    (u/go-forward d)
+                                    (u/yaw (- (- a r)))))
+                              curve-radius
+                              angle
+                              n-faces
+                              transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -612,7 +613,7 @@
                                       (u/yaw (- a r))))
                                 curve-radius
                                 angle
-                                (/ n-faces 2)
+                                n-faces
                                 transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
@@ -665,7 +666,7 @@
                                   (u/pitch (- a r))))
                             curve-radius
                             angle
-                            (/ face-number 2)
+                            face-number
                             transform-step-fn)
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
@@ -703,7 +704,7 @@
                                   (u/pitch (- (- a r)))))
                             curve-radius
                             angle
-                            (/ face-number 2)
+                            face-number
                             transform-step-fn)
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
