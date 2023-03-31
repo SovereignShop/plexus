@@ -245,7 +245,46 @@
                          (rseq top-face)
                          side-faces))))
 
+(defn stich-layers [bottom top n]
+  (assert (= (count top) n))
+  (assert (= (count bottom) n))
+  (loop [i 0
+         ret []]
+    (if (= i n)
+      ret
+      (let [prev (if (zero? i) (dec n) (dec i))
+            next (if (= (inc i) n) 0 (inc i))
+
+            v1 (nth top i)
+            v2 (nth bottom i)
+            v3 (nth bottom next)
+            v4 (nth top next)
+
+            ]
+        (recur (inc i)
+               (conj ret
+                     [v1 v2 v3]
+                     [v1 v3 v4]))))))
+
 (defn iso-hull [polys]
+  (let [first-poly (first polys)
+        poly-res (count first-poly)
+        n-indices (* (count polys) poly-res)
+        indices (vec (range n-indices))
+        bottom-face (take poly-res indices)
+        top-face (subvec indices (- n-indices poly-res) n-indices)
+        iter (mapv vec (partition poly-res indices))
+        side-faces (for [[top bot] (partition 2 1 iter)
+                         face (stich-layers bot top poly-res)]
+                     face
+                     #_[v3 v4 v2 v1])]
+    (m/polyhedron (sequence cat polys)
+                  (list* bottom-face
+                         (rseq top-face)
+                         side-faces))))
+
+
+#_(defn iso-hull [polys]
   (let [first-poly (first polys)
         poly-res (count first-poly)
         n-indices (* (count polys) poly-res)
@@ -254,8 +293,12 @@
         top-face (subvec indices (- n-indices poly-res) n-indices)
         iter (apply mapv list (partition poly-res indices))
         side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
-                         [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))]
-                     [v3 v4 v2 v1])]
+                         ;; [[v1 v2] [v3 v4]]
+                         ;; (partition 2 1 (map list l r))
+                         face (stich-layers l r poly-res)
+                         ]
+                     face
+                     #_[v3 v4 v2 v1])]
     (m/polyhedron (sequence cat polys)
                   (list* bottom-face
                          (rseq top-face)
