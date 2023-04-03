@@ -749,7 +749,8 @@
                                              :tangent tangent
                                              :start-transform new-start-transform
                                              :all-transforms all-transforms)
-                                (not branch?) (assoc :end-transform tf))))))
+                                (not branch?) (assoc :end-transform tf)
+                                (:meta args) (merge (:meta args)))))))
 
 (def-segment-handler ::forward
   [ret ctx args]
@@ -1179,8 +1180,8 @@
                     meta-fn (if meta-props
                               (fn [x]
                                 (with-meta x (assoc (select-keys m meta-props) :tangent tangent)))
-                               (fn [x]
-                                 (with-meta x {:tangent tangent})))]
+                              (fn [x]
+                                (with-meta x {:tangent tangent})))]
               tf (->> tfs
                       (map u/translation-vector)
                       (map select-fn)
