@@ -21,7 +21,7 @@ outer and inner shapes.
 
 (->> (path
       (result :name :pipes 
-              :expr (difference :outer :inner)
+              :expr (difference :outer :inner))
       
       (body :shape (m/circle 6) :name :outer)
       (body :shape (m/circle 4) :name :inner)
