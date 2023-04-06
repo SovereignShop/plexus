@@ -4,8 +4,8 @@
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
          scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
- {:run-m   {:main-opts ["-m" "scad-paths.core"]}
-  :run-x   {:ns-default scad-paths.main
+ {:run-m   {:main-opts ["-m" "plexus.core"]}
+  :run-x   {:ns-default plexus.main
             :exec-fn    greet
             :exec-args  {:name "Clojure"}}
   :test    {:extra-paths ["src/test"]
@@ -18,6 +18,6 @@
   :uberjar {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.0.216"}}
             :exec-fn      hf.depstar/uberjar
             :exec-args    {:aot        true
-                           :jar        "scad-paths.jar"
-                           :main-class "scad-paths.core"
+                           :jar        "plexus.jar"
+                           :main-class "plexus.core"
                            :sync-pom   true}}}}

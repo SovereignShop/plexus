@@ -1,13 +1,13 @@
-(ns scad-paths.core
+(ns plexus.core
   (:refer-clojure :exclude [set])
   (:require
    [clojure.string :as string]
    [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
    [scad-clj.scad :as s]
-   [scad-paths.segment :as sg]
-   [scad-paths.triangles :as triangles]
-   [scad-paths.utils :as u]
+   [plexus.segment :as sg]
+   [plexus.triangles :as triangles]
+   [plexus.utils :as u]
    [scad-clj.model :as m]
    [camel-snake-kebab.core :as csk]))
 

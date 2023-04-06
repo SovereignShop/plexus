@@ -1,4 +1,4 @@
-(ns scad-paths.triangles)
+(ns plexus.triangles)
 
 (defn bAc->a
   "side,angle,side -> side via. law of cosines."

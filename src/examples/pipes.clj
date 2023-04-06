@@ -2,7 +2,7 @@
   (:require
    [scad-clj.scad :as s]
    [scad-clj.model :as m]
-   [scad-paths.core
+   [plexus.core
     :refer [model left right forward up down hull path set branch arc defmodel]]))
 
 (->> (path

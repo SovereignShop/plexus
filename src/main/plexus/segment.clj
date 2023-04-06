@@ -1,8 +1,8 @@
-(ns scad-paths.segment
+(ns plexus.segment
   (:require
    [scad-clj.model :as m]
    [clojure.core.matrix :as mat]
-   [scad-paths.utils :as u]))
+   [plexus.utils :as u]))
 
 (defn get-rotation
   "Get rotation transform to start of segment."

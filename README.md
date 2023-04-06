@@ -18,7 +18,7 @@ outer and inner shapes.
 ``` clojure
 (require '[scad-clj.scad :as s]
          '[scad-clj.model :as m]
-         '[scad-paths.core :refer [model left right forward up down hull path set branch]]
+         '[plexus.core :refer [model left right forward up down hull path set branch]]
 
 (->> (path
       [(model :shape (m/circle 6) :mask? false :name :body)
@@ -75,7 +75,7 @@ This path is equivalent to the one above.
 
 ## Hulls
 
-Hulls are often a great way to transform between shapes using openscad. Hulls in scad-paths
+Hulls are often a great way to transform between shapes using openscad. Hulls in plexus
 are applied in a stack-like fashion to the previous two shapes:
 
 ``` clojure

@@ -1,4 +1,4 @@
-(ns scad-paths.utils
+(ns plexus.utils
   (:require
    [clojure.core.matrix :as mat]
    [scad-clj.model :as m]))
