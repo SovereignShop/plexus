@@ -187,7 +187,7 @@ You can make any segment a gap with the gap parameter:
     (spit "test.scad"))
 ```
 
-![Segment Example] (https://github.com/SovereignShop/plexus/blob/main/resources/images/segment-example.png)
+![Segment Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/segment-example.png)
 
 Also use `segment` to nest paths.
 
