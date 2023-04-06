@@ -216,35 +216,6 @@
             (m/union)
             (m/with-fn face-number))])))
 
-#_(defn iso-hull [segs]
-  (let [polys (map (fn [seg]
-                     (let [m (meta seg)
-                           tf (:start-transform m)
-                           shape (:shape m)
-                           pts (:points (second shape))]
-                       (for [[x y] pts]
-                         (-> tf
-                             (go-forward x :x)
-                             (go-forward y :y)
-                             (translation-vector)))))
-                   segs)
-
-        first-poly (first polys)
-        poly-res (count first-poly)
-        n-indices (* (count polys) poly-res)
-        indices (vec (range n-indices))
-        bottom-face (take poly-res indices)
-        top-face (subvec indices (- n-indices poly-res) n-indices)
-        iter (apply mapv list (partition poly-res indices))
-        side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
-                         [[v1 v2] [v3 v4]] (partition 2 1 (map list l r))
-                         face [[v3 v4 v2] [v3 v2 v1]]]
-                     face)]
-    (m/polyhedron (sequence cat polys)
-                  (list* bottom-face
-                         (rseq top-face)
-                         side-faces))))
-
 (defn n-faces [v not-found]
   (-> v meta (:n-faces not-found)))
 
@@ -256,61 +227,15 @@
     (if (= i n)
       ret
       (let [prev (if (zero? i) (dec n) (dec i))
-            next (if (= (inc i) n) 0 (inc i))
-
-            t-p-index (nth top prev)
-            t-n-index (nth top next)
-            t-c-index (nth top i)
-
-            b-p-index (nth bot prev)
-            b-c-index (nth bot i)
-            b-n-index (nth bot next)
-
-            t-p-faces  (n-faces (nth vertices t-p-index) 2)
-            t-c-faces (n-faces (nth vertices t-c-index) 2)
-            t-n-faces (n-faces (nth vertices t-n-index) 2)
-
-            b-p-faces (n-faces (nth vertices b-p-index) 2)
-            b-c-faces (n-faces (nth vertices b-c-index) 2)
-            b-n-faces (n-faces (nth vertices b-n-index) 2)]
-
-        (cond (= t-p-faces 3)
-              (recur (inc i)
-                     (conj ret
-                           [(nth top i)
-                            (nth bot prev)
-                            (nth bot i)]
-                           [(nth top i)
-                            (nth bot i)
-                            (nth bot next)
-                            (nth top next)]))
-
-              (= t-n-faces 3)
-              (recur (inc i)
-                     (conj ret
-                           [(nth top i)
-                            (nth bot i)
-                            (nth bot next)]))
-
-              (= t-c-faces 3)
-              (recur (inc i)
-                     (conj ret
-                           [(nth top prev)
-                            (nth bot i)
-                            (nth top i)]
-                           [(nth top i)
-                            (nth bot i)
-                            (nth top next)]))
-
-              :else
-              (recur (inc i)
-                     (conj ret
-                           [(nth top i)
-                            (nth bot i)
-                            (nth bot next)]
-                           [(nth top i)
-                            (nth bot next)
-                            (nth top next)])))))))
+            next (if (= (inc i) n) 0 (inc i))]
+        (recur (inc i)
+               (conj ret
+                     [(nth top i)
+                      (nth bot i)
+                      (nth bot next)]
+                     [(nth top i)
+                      (nth bot next)
+                      (nth top next)]))))))
 
 (defn iso-hull [polys]
   (let [first-poly (first polys)
@@ -325,27 +250,6 @@
                          face (stich-layers vertices bot top poly-res)]
                      face)]
     (m/polyhedron vertices
-                  (list* bottom-face
-                         (rseq top-face)
-                         side-faces))))
-
-
-#_(defn iso-hull [polys]
-  (let [first-poly (first polys)
-        poly-res (count first-poly)
-        n-indices (* (count polys) poly-res)
-        indices (vec (range n-indices))
-        bottom-face (take poly-res indices)
-        top-face (subvec indices (- n-indices poly-res) n-indices)
-        iter (apply mapv list (partition poly-res indices))
-        side-faces (for [[l r] (partition 2 1 (conj iter (nth iter 0)))
-                         ;; [[v1 v2] [v3 v4]]
-                         ;; (partition 2 1 (map list l r))
-                         face (stich-layers l r poly-res)
-                         ]
-                     face
-                     #_[v3 v4 v2 v1])]
-    (m/polyhedron (sequence cat polys)
                   (list* bottom-face
                          (rseq top-face)
                          side-faces))))
