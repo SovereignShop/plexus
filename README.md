@@ -148,15 +148,16 @@ The body of the branch is just another path. Notice the mask is not subtracted f
 You can make any segment a gap with the gap parameter:
 
 ``` clojure
-(->> (path [(result :name :pipes
-                    :expr (difference :outer :inner))
-            (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)  
-            (left :angle (/ Math/PI 2) :gap true)
-            (right :angle (/ Math/PI 2))
-            (left :gap true)
-            (right)
-            (left :gap true)
-            (right)])
+(->> (path
+      (result :name :pipes
+              :expr (difference :outer :inner))
+      (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (left :angle (/ Math/PI 2) :gap true)
+      (right :angle (/ Math/PI 2))
+      (left :gap true)
+      (right)
+      (left :gap true)
+      (right)])
      (s/write-scad)
      (spit "test.scad"))
 
