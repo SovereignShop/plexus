@@ -3,7 +3,8 @@
    [scad-clj.scad :as s]
    [scad-clj.model :as m]
    [plexus.core
-    :refer [model left right forward up down hull path set branch arc defmodel]]))
+    :refer [result body left right forward up down hull path set branch arc defmodel
+            model rotate segment difference union intersection]]))
 
 (->> (path
       [(model :shape (m/circle 6) :mask? false :name :body)
@@ -110,12 +111,50 @@
 (defmodel arc-torus
   (model :shape (m/circle 2) :fn 50)
   (arc :side-length 20 :curve-radius 20)
-  (arc :side-length 20 :curve-radius 20)
-  (arc :side-length 20 :curve-radius 20)
-  (arc :side-length 20 :curve-radius 20)
-  (arc :side-length 20 :curve-radius 20)
-  (arc :side-length 20 :curve-radius 20))
+  #_(arc :side-length 20 :curve-radius 20)
+  #_(arc :side-length 20 :curve-radius 20)
+  #_(arc :side-length 20 :curve-radius 20)
+  #_(arc :side-length 20 :curve-radius 20)
+  #_(arc :side-length 20 :curve-radius 20))
 
 (->> arc-torus
      (s/write-scad)
      (spit "test.scad"))
+
+;; Segment
+
+(->> (path
+      (result :name :pipes
+              :expr (difference :outer :inner))
+      (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (body :shape (m/circle 4) :name :inner)
+      (segment
+       (for [i (range 4)]
+         (branch
+          :from :outer
+          (rotate :x (* i 1/2 Math/PI))
+          (forward :length 30)))))
+     (s/write-scad)
+     (spit "test.scad"))
+
+;; Also use segment to nest paths
+
+(let [pipe-path (path
+                 (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+                 (body :shape (m/circle 4) :name :inner)
+                 (forward :length 30))]
+  (->> (path
+        (result :name :pipes
+                :expr (difference :outer :inner))
+        (body :name :origin)
+
+        (segment
+         (for [i (range 4)]
+           (branch
+            :from :origin
+            (rotate :x (* i 1/2 Math/PI))
+            (segment pipe-path)))))
+       (s/write-scad)
+       (spit "test.scad")))
+
+;; This is equivalent to above. Notice the nested pipes-path inherits the frame in which it's placed.

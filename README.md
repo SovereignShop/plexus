@@ -163,8 +163,56 @@ You can make any segment a gap with the gap parameter:
 
 ```
 
+
 ![Gap Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/gap-example.png)
 
+
+## Segments
+
+`segment` is kind of like a `do` in clojure. Importantly, they enable you to use loops in your path definition.
+
+``` clojure
+(->> (path
+     (result :name :pipes
+             :expr (difference :outer :inner))
+     (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+     (body :shape (m/circle 4) :name :inner)
+     (segment
+      (for [i (range 4)]
+        (branch
+         :from :outer
+         (rotate :x (* i 1/2 Math/PI))
+         (forward :length 30)))))
+    (s/write-scad)
+    (spit "test.scad"))
+```
+
+![Segment Example] (https://github.com/SovereignShop/plexus/blob/main/resources/images/segment-example.png)
+
+Also use `segment` to nest paths.
+
+``` clojure
+(let [pipe-path (path
+                 (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+                 (body :shape (m/circle 4) :name :inner)
+                 (forward :length 30))]
+  (->> (path
+        (result :name :pipes
+                :expr (difference :outer :inner))
+        (body :name :origin)
+
+        (segment
+         (for [i (range 4)]
+           (branch
+            :from :origin
+            (rotate :x (* i 1/2 Math/PI))
+            (segment pipe-path)))))
+            
+        (s/write-scad)
+        (spit "test.scad")))
+```
+
+This produces equivalent output to above. Notice 
 
 # Extensions
 
