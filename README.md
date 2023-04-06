@@ -166,7 +166,6 @@ You can make any segment a gap with the gap parameter:
 
 ![Gap Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/gap-example.png)
 
-
 ## Segments
 
 `segment` is kind of like a `do` in clojure. Importantly, they enable you to use loops in your path definition.
@@ -212,7 +211,25 @@ Also use `segment` to nest paths.
         (spit "test.scad")))
 ```
 
-This produces equivalent output to above. Notice 
+This produces equivalent output to above. Notice the nested pipes-path inherits the frame in which it's placed.
+
+## Points
+
+`points` is similar to `path` except you use it to define 2D polygons. Here's an example of how to define a circle.
+
+``` clojure
+(->> (m/polygon
+      (points
+       :axes [:x :z]
+       (body :name :origin :fn 20)
+       (translate :x 50)
+       (left :angle (* 2 Math/PI) :curve-radius 50)))
+     (s/write-scad)
+     (spit "test.scad"))
+```
+
+![Points Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/points-example.png)
+
 
 # Extensions
 

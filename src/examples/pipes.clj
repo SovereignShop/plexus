@@ -4,7 +4,7 @@
    [scad-clj.model :as m]
    [plexus.core
     :refer [result body left right forward up down hull path set branch arc defmodel
-            model rotate segment difference union intersection]]))
+            model rotate translate segment difference union intersection points]]))
 
 (->> (path
       [(model :shape (m/circle 6) :mask? false :name :body)
@@ -137,8 +137,6 @@
      (s/write-scad)
      (spit "test.scad"))
 
-;; Also use segment to nest paths
-
 (let [pipe-path (path
                  (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
                  (body :shape (m/circle 4) :name :inner)
@@ -157,4 +155,13 @@
        (s/write-scad)
        (spit "test.scad")))
 
-;; This is equivalent to above. Notice the nested pipes-path inherits the frame in which it's placed.
+;; Points
+
+(->> (m/polygon
+      (points
+       :axes [:x :z]
+       (body :name :origin :fn 20)
+       (translate :x 50)
+       (left :angle (* 2 Math/PI) :curve-radius 50)))
+     (s/write-scad)
+     (spit "test.scad"))
