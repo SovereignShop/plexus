@@ -75,7 +75,7 @@ We can elide this, as by default each segement will reply to every body you have
       (left :angle (/ Math/PI 2))
       (right :angle (/ Math/PI 2))
       (forward :length 10)
-      (up :to [:outer :inner])
+      (up)
       (forward :length 20))
      (s/write-scad)
      (spit "test.scad"))
@@ -132,8 +132,8 @@ Branches work as you'd expect:
       (body :shape (m/circle 4) :name :inner)
       (set :curve-radius 10 :fn 70)
 
-      (branch (left) (right) (forward :length 20))
-      (branch (right) (left) (forward :length 20)))
+      (branch :from :outer (left) (right) (forward :length 20))
+      (branch :from :outer (right) (left) (forward :length 20)))
      (s/write-scad)
      (spit "test.scad"))
 ```
