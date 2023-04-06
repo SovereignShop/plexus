@@ -133,7 +133,7 @@ Branches work as you'd expect:
       (set :curve-radius 10 :fn 70)
 
       (branch (left) (right) (forward :length 20))
-      (branch (right) (left) (forward :length 20))])
+      (branch (right) (left) (forward :length 20)))
      (s/write-scad)
      (spit "test.scad"))
 ```
@@ -157,7 +157,7 @@ You can make any segment a gap with the gap parameter:
       (left :gap true)
       (right)
       (left :gap true)
-      (right)])
+      (right))
      (s/write-scad)
      (spit "test.scad"))
 
