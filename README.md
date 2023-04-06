@@ -1,6 +1,6 @@
-# SCAD Paths
+# Plexus
 
-An [scad-clj](https://github.com/farrellm/scad-clj) paths library. It defines a simple, extensible language for extruding shapes in a step-wise, relative fashion using egocentric reference frames.
+Plexus defines a simple, extensible language for extruding shapes in a step-wise, relative fashion using egocentric reference frames.
 
 You can specify 3D models by providing a series of extrusions to a set of shapes and masks, which are then composited in a controlled
 order using CSG operations.
