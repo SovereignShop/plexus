@@ -534,7 +534,6 @@
                             (tf-fn transform r d step-angle)))
                         start-transform)))))
 
-
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn]
@@ -729,8 +728,9 @@
         part (m/with-fn (or (:fn args) (:fn ctx))
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
-                       (->> shape
-                            (m/extrude-linear {:height length :center center :twist twist}))) m
+                       (cond->> shape
+                         true  (m/extrude-linear {:height (Math/abs length) :center center :twist twist})
+                         (neg? length) (m/translate [0 0 length]))) m
                  (if mask
                    (m/difference m mask)
                    m)))
