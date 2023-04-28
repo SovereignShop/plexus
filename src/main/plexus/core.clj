@@ -198,7 +198,7 @@
         (assoc :segment-groups (group-by #(get (meta %) :name :unnamed) segs))
         (update :models assoc (:name result) [(vary-meta ret dissoc :old-model)]))))
 
-(defn ->model [{:keys [models result path-spec transforms name namespace branch-models] :as state}]
+(defn ->model [{:keys [models result path-spec transforms name namespace branch-models coordinate-frames] :as state}]
   (if result
     (let [state
           (reduce (fn [state [_ result]]
@@ -215,7 +215,7 @@
                              (string/join "_" (remove nil?
                                                       [(.replaceAll (csk/->snake_case (str namespace))
                                                                     "\\." "_")
-                                                      #dbg (when (and (keyword? name) (namespace name))
+                                                       (when (and (keyword? name) (namespace name))
                                                          (.replaceAll (csk/->snake_case (str (clojure.core/namespace name)))
                                                                       "\\." "_"))
                                                        (csk/->snake_case (clojure.core/name name_))
@@ -245,6 +245,7 @@
                 frame-segs (m/union frame-segs)))
         {:segments segments
          :branch-models branch-models
+         :coordinate-frames coordinate-frames
          :namespace namespace
          :transforms transforms
          :name (or name "default")
@@ -333,7 +334,7 @@
   (model-impl* ret args))
 
 (defmethod path-form ::branch
-  [{:keys [models index transforms] :as state} args]
+  [{:keys [models index transforms coordinate-frames] :as state} args]
   (let [from-model (:from args)
         with-models (:with args)
         model (get models from-model)
@@ -352,6 +353,7 @@
            :models (assoc models
                           from-model
                           (conj (pop model) (vary-meta (peek model) update :branch conj m)))
+           :coordinate-frames (into coordinate-frames (-> new-m :coordinate-frames))
            :transforms (merge transforms (-> m meta :transforms)))))
 
 #_(defmethod path-form ::branch
