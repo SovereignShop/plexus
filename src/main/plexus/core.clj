@@ -128,13 +128,6 @@
 (defn normalize-segment [segment]
   (remove nil?
           (if (and (sequential? (first segment))
-                   #_(sequential? (ffirst segment)))
-            (first segment)
-            segment)))
-
-(defn normalize-segment-tmp [segment]
-  (remove nil?
-          (if (and (sequential? (first segment))
                    (sequential? (ffirst segment)))
             (first segment)
             segment)))
@@ -173,7 +166,8 @@
             ([tree]
              (if (keyword? tree)
                (let [m (meta (or (second (tree model-table))
-                                 (first (tree model-table))))]
+                                 (first (tree model-table))
+                                 (throw (Exception. (str "result tree model " tree " not found.")))))]
                  (with-meta
                    (sg/normalise (with-meta (m/call-module (make-module-name namespace tree)) m))
                    (assoc m
@@ -191,7 +185,7 @@
                                                               (if-let [old-model (:old-model (meta seg))]
                                                                 (sg/project (with-meta (sg/project seg) old-model))
                                                                 (sg/project seg)))))
-                                      (normalize-segment-tmp (next tree)))
+                                      (normalize-segment (next tree)))
                        m (meta (last segs))
                        new-m (assoc default-model :old-model (:old-model m))]
                    (case (first tree)
@@ -308,13 +302,14 @@
      (cond (nil? form)
            (->model (assoc state :path-spec path-forms))
 
-           :else
-           (if (= (:op form) ::segment)
+           (sequential? form)
+           (if (= (first form) ::segment)
              (recur
               state
-              (concat (or (-> form ::list first meta :path-spec) (normalize-segment (::list form)))
+              (concat (or (-> form second meta :path-spec) (normalize-segment (next form)))
                       forms))
-             (let [new-state (path-form (update state :index inc) form)]
+             (let [args (parse-args form)
+                   new-state (path-form (update state :index inc) args)]
                (recur new-state forms)))))))
 
 (defn path [& path-forms]
@@ -352,6 +347,7 @@
 (defmethod path-form ::branch
   [{:keys [models index transforms coordinate-frames] :as state} args]
   (let [from-model (:from args)
+        _ (assert (contains? models from-model) (str "Attempting branch from undefined model: " from-model))
         with-models (:with args)
         model (get models from-model)
         model-data (meta (peek model))
@@ -981,11 +977,15 @@
               [:curve-radius {:optional true} number?]]))
 
 (def linear-extrude-schema
-  (ma/schema [:map
-              [:length {:optional true} number?]
-              [:x {:optional true} number?]
-              [:y {:optional true} number?]
-              [:z {:optional true} number?]]))
+  (ma/schema [:and
+              [:map
+               [:length {:optional true} number?]
+               [:x {:optional true} number?]
+               [:y {:optional true} number?]
+               [:z {:optional true} number?]]
+              [:fn {:error/message "x, y, z, and length are mutually exclusive."}
+               (fn [{:keys [x y z length]}]
+                 (= 1 (count (remove nil? [x y z length]))))]]))
 
 (def model-schema
   [:map
@@ -994,80 +994,98 @@
 (def any-map-schema
   (ma/schema [:map]))
 
+(def forward-schema
+  [:and
+   [:map
+    [:x {:optional true} number?]
+    [:y {:optional true} number?]
+    [:z {:optional true} number?]
+    [:length {:optional true} number?]]
+   [:fn {:error/message "x, y, z, and length are mutually exclusive."}
+    (fn [{:keys [x y z length]}]
+      (= 1 (count (remove nil? [x y z length]))))]])
+
+(defn validate-form [form schema]
+  (and (parse-args form schema)
+       form))
 
 (defn left
   [& opts]
-  (parse-args `(::left ~@opts)
-              (ma/schema curve-schema)))
+  (validate-form `(::left ~@opts)
+                 (ma/schema curve-schema)))
 
 (defn right [& opts]
-  (parse-args `(::right ~@opts)
-              (ma/schema curve-schema)))
+  (validate-form `(::right ~@opts)
+                 (ma/schema curve-schema)))
 
 (defn up [& opts]
-  (parse-args `(::up ~@opts)
-              (ma/schema curve-schema)))
+  (validate-form `(::up ~@opts)
+                 (ma/schema curve-schema)))
 
 (defn down [& opts]
-  (parse-args `(::down ~@opts)
-              (ma/schema curve-schema)))
+  (validate-form `(::down ~@opts)
+                 (ma/schema curve-schema)))
 
 (defn arc [& opts]
-  (parse-args  `(::arc ~@opts)
-               (ma/schema curve-schema)))
+  (validate-form  `(::arc ~@opts)
+                  (ma/schema curve-schema)))
 
 (defn roll [& opts]
-  (parse-args `(::roll ~@opts)
-              (ma/schema curve-schema)))
+  (validate-form `(::roll ~@opts)
+                 (ma/schema curve-schema)))
 
 (defn forward [& opts]
-  (parse-args `(::forward ~@opts) linear-extrude-schema))
+  (validate-form `(::forward ~@opts) forward-schema))
 
 (defn backward [& opts]
-  (parse-args `(::backward ~@opts) linear-extrude-schema))
+  (validate-form `(::backward ~@opts) linear-extrude-schema))
 
 (defn hull [& opts]
-  (parse-args `(::hull ~@opts) any-map-schema))
+  (validate-form `(::hull ~@opts) any-map-schema))
 
 (defn model [& args]
-  (parse-args `(::model ~@args) model-schema))
+  (validate-form `(::model ~@args) model-schema))
 
 (defn translate [& args]
-  (parse-args `(::translate ~@args)
-              (ma/schema [:map
-                          [:x {:optional true} number?]
-                          [:y {:optional true} number?]
-                          [:z {:optional true} number?]
-                          [:global? {:optional true} :boolean]])))
+  (validate-form `(::translate ~@args)
+                 (ma/schema
+                  [:and [:map
+                         [:x {:optional true} number?]
+                         [:y {:optional true} number?]
+                         [:z {:optional true} number?]
+                         [:global? {:optional true} :boolean]]
+                   [:fn {:error/message "Must include x, y, and/or z."}
+                    (fn [{:keys [x y z]}]
+                      (or x y z))]])))
 
 (defn rotate [& args]
-  (parse-args `(::rotate ~@args)
-              (ma/schema [:map
-                          [:x {:optional true} number?]
-                          [:y {:optional true} number?]
-                          [:z {:optional true} number?]])))
+  (validate-form `(::rotate ~@args)
+                 (ma/schema [:map
+                             [:x {:optional true} number?]
+                             [:y {:optional true} number?]
+                             [:z {:optional true} number?]])))
 
 (defn transform [& args]
-  (parse-args `(::transform ~@args)
-              [:map
-               [:transform :transform]]))
+  (validate-form `(::transform ~@args)
+                 [:map
+                  [:transform :transform]]))
 
 (defn spin [& args]
-  (parse-args `(::spin ~@args)
-              any-map-schema))
+  (validate-form `(::spin ~@args)
+                 any-map-schema))
 
 (defn set [& args]
-  (parse-args `(::set ~@args)
-              any-map-schema))
+  ( validate-form `(::set ~@args)
+                 any-map-schema))
 
 (defn branch [& args]
-  (parse-args `(::branch ~@args)
-              (ma/schema [:map
-                          [:from [:or keyword? string?]]
-                          [:with {:optional true} [:vector [:or keyword? string?]]]])))
+  (validate-form `(::branch ~@args)
+                 (ma/schema [:map
+                             [:from [:or keyword? string?]]
+                             [:with {:optional true} [:vector [:or keyword? string?]]]])))
 
 (defn segment [& args]
-  (parse-args `(::segment ~@args) any-map-schema))
+  (validate-form `(::segment ~@args) any-map-schema))
 
 (defn to [& p]
   (let [[opts parsed-path] (parse-path p)
@@ -1077,46 +1095,46 @@
     (segment path*)))
 
 (defn mask [& args]
-  (parse-args `(::model ~@(conj (vec args) :mask? true))
-              model-schema))
+  (validate-form `(::model ~@(conj (vec args) :mask? true))
+                 model-schema))
 
 (defn body [& args]
-  (parse-args `(::model ~@(concat args [:mask? false]))
-              model-schema))
+  (validate-form `(::model ~@(concat args [:mask? false]))
+                 model-schema))
 
 (defn save-transform [& args]
-  (parse-args `(::save-transform ~@args)
-              [:map
-               [:name [:or keyword? string?]]
-               [:model [:or keyword? string?]]]))
+  (validate-form `(::save-transform ~@args)
+                 [:map
+                  [:name [:or keyword? string?]]
+                  [:model [:or keyword? string?]]]))
 
 (defn offset [& args]
-  (parse-args `(::offset ~@args)
-              [:map
-               [:offset number?]]))
+  (validate-form `(::offset ~@args)
+                 [:map
+                  [:offset number?]]))
 
 (defn minkowski [& args]
-  (parse-args `(::minkowski ~@args)
-              any-map-schema))
+  (validate-form `(::minkowski ~@args)
+                 any-map-schema))
 
 (defn add-ns [& args]
-  (parse-args `(::add-ns ~@args)
-              [:map
-               [:namespace [:or keyword? string?]]]))
+  (validate-form `(::add-ns ~@args)
+                 [:map
+                  [:namespace [:or keyword? string?]]]))
 
 (defn forward-until [& args]
-  (parse-args `(::forward-until ~@args)
-              any-map-schema))
+  (validate-form `(::forward-until ~@args)
+                 any-map-schema))
 
 (defn ignore [& args]
-  (parse-args `(::ignore ~@args)
-              any-map-schema))
+  (validate-form `(::ignore ~@args)
+                 any-map-schema))
 
 (defn result [& args]
-  (parse-args `(::result ~@args)
-              [:map
-               [:name [:or keyword? string?]]
-               [:expr any?]]))
+  (validate-form `(::result ~@args)
+                 [:map
+                  [:name [:or keyword? string?]]
+                  [:expr [:or keyword? [:sequential any?]]]]))
 
 (defn union [& args]
   `(::union ~@args))
@@ -1128,27 +1146,27 @@
   `(::difference ~@args))
 
 (defn slice [& args]
-  (parse-args `(::slice ~@args)
-              [:map
-               [:length number?]]))
+  (validate-form `(::slice ~@args)
+                 [:map
+                  [:length number?]]))
 
 (defn iso-hull [& args]
-  (parse-args `(::iso-hull ~@args)
-              [:map
-               [:n-segments :pos-int]]))
+  (validate-form `(::iso-hull ~@args)
+                 [:map
+                  [:n-segments :pos-int]]))
 
 (defn import [& args]
-  (parse-args `(::import ~@args)
-              [:map
-               [:stl string?]]))
+  (validate-form `(::import ~@args)
+                 [:map
+                  [:stl string?]]))
 
 (defn show-coordinate-frame [& args]
-  (parse-args `(::show-coordinate-frame ~@args)
-              [:map
-               [:radius number?]
-               [:length number?]
-               [:label string?]
-               [:frame-offset [:tuple :int :int :int]]]))
+  (validate-form `(::show-coordinate-frame ~@args)
+                 [:map
+                  [:radius number?]
+                  [:length number?]
+                  [:label string?]
+                  [:frame-offset [:tuple :int :int :int]]]))
 
 (defn get-models [args]
   (for [arg args]
