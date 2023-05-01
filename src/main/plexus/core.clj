@@ -9,7 +9,8 @@
    [plexus.triangles :as triangles]
    [plexus.utils :as u]
    [scad-clj.model :as m]
-   [camel-snake-kebab.core :as csk]))
+   [camel-snake-kebab.core :as csk]
+   [malli.core :as ma]))
 
 (defmulti path-form (fn [_ args] (:op args)))
 
@@ -105,17 +106,33 @@
 (defn path? [x]
   (-> x meta :path-spec))
 
-(defn parse-args [form]
-  (loop [[arg & args] (next form)
-         kvs (transient {:op (first form)})]
-    (if (nil? arg)
-      (persistent! kvs)
-      (if (keyword? arg)
-        (recur (next args)
-               (assoc! kvs arg (first args)))
-        (persistent! (assoc! kvs ::list (vec (cons arg args))))))))
+(defn parse-args
+  ([form]
+   (parse-args form nil))
+  ([form schema]
+   (loop [[arg & args] (next form)
+          kvs (transient {:op (first form)})]
+     (if (nil? arg)
+       (let [ret (persistent! kvs)]
+         (if schema
+           (ma/coerce schema ret nil {:registry u/registry})
+           ret))
+       (if (keyword? arg)
+         (recur (next args)
+                (assoc! kvs arg (first args)))
+         (let [ret (persistent! (assoc! kvs ::list (vec (cons arg args))))]
+           (if schema
+             (ma/coerce schema ret nil {:registry u/registry})
+             ret)))))))
 
 (defn normalize-segment [segment]
+  (remove nil?
+          (if (and (sequential? (first segment))
+                   #_(sequential? (ffirst segment)))
+            (first segment)
+            segment)))
+
+(defn normalize-segment-tmp [segment]
   (remove nil?
           (if (and (sequential? (first segment))
                    (sequential? (ffirst segment)))
@@ -174,7 +191,7 @@
                                                               (if-let [old-model (:old-model (meta seg))]
                                                                 (sg/project (with-meta (sg/project seg) old-model))
                                                                 (sg/project seg)))))
-                                      (normalize-segment (next tree)))
+                                      (normalize-segment-tmp (next tree)))
                        m (meta (last segs))
                        new-m (assoc default-model :old-model (:old-model m))]
                    (case (first tree)
@@ -291,14 +308,13 @@
      (cond (nil? form)
            (->model (assoc state :path-spec path-forms))
 
-           (sequential? form)
-           (if (= (first form) ::segment)
+           :else
+           (if (= (:op form) ::segment)
              (recur
               state
-              (concat (or (-> form second meta :path-spec) (normalize-segment (next form)))
+              (concat (or (-> form ::list first meta :path-spec) (normalize-segment (::list form)))
                       forms))
-             (let [args (parse-args form)
-                   new-state (path-form (update state :index inc) args)]
+             (let [new-state (path-form (update state :index inc) form)]
                (recur new-state forms)))))))
 
 (defn path [& path-forms]
@@ -487,7 +503,7 @@
 
 (defmethod path-form ::show-coordinate-frame
   [state
-   {:keys [radius length frame-offset to]
+   {:keys [radius length frame-offset to label]
     :or {length 20 radius 1 frame-offset [0 0 0]}
     :as args}]
   (let [models (cond-> (:models state)
@@ -502,7 +518,9 @@
                      (m/color [0 1 0]))
         z-arrow (->> arrow
                      (m/color [0 0 1]))
-        frame (->> (m/union x-arrow y-arrow z-arrow)
+        frame (->> (m/union x-arrow y-arrow z-arrow
+                            (when label
+                              (->> (m/text label))))
                    (m/translate frame-offset))]
     (reduce (fn [state model]
               (let [m (meta (peek model))
@@ -953,93 +971,152 @@
                   new-m)]
     (conj ret new-seg)))
 
-(defn extrude-to [& opts]
+(defn extrude-to
+  [& opts]
   `(::extrude-to ~@opts))
 
-(defn left [& opts]
-  `(::left ~@opts))
+(def curve-schema
+  (ma/schema [:map
+              [:angle {:optional true} number?]
+              [:curve-radius {:optional true} number?]]))
+
+(def linear-extrude-schema
+  (ma/schema [:map
+              [:length {:optional true} number?]
+              [:x {:optional true} number?]
+              [:y {:optional true} number?]
+              [:z {:optional true} number?]]))
+
+(def model-schema
+  [:map
+   [:shape {:optional true} [:sequential any?]]])
+
+(def any-map-schema
+  (ma/schema [:map]))
+
+
+(defn left
+  [& opts]
+  (parse-args `(::left ~@opts)
+              (ma/schema curve-schema)))
 
 (defn right [& opts]
-  `(::right ~@opts))
+  (parse-args `(::right ~@opts)
+              (ma/schema curve-schema)))
 
 (defn up [& opts]
-  `(::up ~@opts))
+  (parse-args `(::up ~@opts)
+              (ma/schema curve-schema)))
 
 (defn down [& opts]
-  `(::down ~@opts))
+  (parse-args `(::down ~@opts)
+              (ma/schema curve-schema)))
 
 (defn arc [& opts]
-  `(::arc ~@opts))
+  (parse-args  `(::arc ~@opts)
+               (ma/schema curve-schema)))
 
 (defn roll [& opts]
-  `(::roll ~@opts))
+  (parse-args `(::roll ~@opts)
+              (ma/schema curve-schema)))
 
 (defn forward [& opts]
-  `(::forward ~@opts))
+  (parse-args `(::forward ~@opts) linear-extrude-schema))
 
 (defn backward [& opts]
-  `(::backward ~@opts))
+  (parse-args `(::backward ~@opts) linear-extrude-schema))
 
 (defn hull [& opts]
-  `(::hull ~@opts))
+  (parse-args `(::hull ~@opts) any-map-schema))
 
 (defn model [& args]
-  `(::model ~@args))
+  (parse-args `(::model ~@args) model-schema))
 
 (defn translate [& args]
-  `(::translate ~@args))
+  (parse-args `(::translate ~@args)
+              (ma/schema [:map
+                          [:x {:optional true} number?]
+                          [:y {:optional true} number?]
+                          [:z {:optional true} number?]
+                          [:global? {:optional true} :boolean]])))
 
 (defn rotate [& args]
-  `(::rotate ~@args))
+  (parse-args `(::rotate ~@args)
+              (ma/schema [:map
+                          [:x {:optional true} number?]
+                          [:y {:optional true} number?]
+                          [:z {:optional true} number?]])))
 
 (defn transform [& args]
-  `(::transform ~@args))
+  (parse-args `(::transform ~@args)
+              [:map
+               [:transform :transform]]))
 
 (defn spin [& args]
-  `(::spin ~@args))
+  (parse-args `(::spin ~@args)
+              any-map-schema))
 
 (defn set [& args]
-  `(::set ~@args))
+  (parse-args `(::set ~@args)
+              any-map-schema))
 
 (defn branch [& args]
-  `(::branch ~@args))
+  (parse-args `(::branch ~@args)
+              (ma/schema [:map
+                          [:from [:or keyword? string?]]
+                          [:with {:optional true} [:vector [:or keyword? string?]]]])))
 
 (defn segment [& args]
-  `(::segment ~@args))
+  (parse-args `(::segment ~@args) any-map-schema))
 
 (defn to [& p]
   (let [[opts parsed-path] (parse-path p)
-        path* (map (fn [[x & xs]]
-                     (list* x :to (:models opts) xs))
+        path* (map (fn [x]
+                     (assoc x :to (:models opts)))
                    parsed-path)]
     (segment path*)))
 
 (defn mask [& args]
-  `(::model ~@(conj (vec args) :mask? true)))
+  (parse-args `(::model ~@(conj (vec args) :mask? true))
+              model-schema))
 
 (defn body [& args]
-  `(::model ~@(concat args [:mask? false])))
+  (parse-args `(::model ~@(concat args [:mask? false]))
+              model-schema))
 
 (defn save-transform [& args]
-  `(::save-transform ~@args))
+  (parse-args `(::save-transform ~@args)
+              [:map
+               [:name [:or keyword? string?]]
+               [:model [:or keyword? string?]]]))
 
 (defn offset [& args]
-  `(::offset ~@args))
+  (parse-args `(::offset ~@args)
+              [:map
+               [:offset number?]]))
 
 (defn minkowski [& args]
-  `(::minkowski ~@args))
+  (parse-args `(::minkowski ~@args)
+              any-map-schema))
 
 (defn add-ns [& args]
-  `(::add-ns ~@args))
+  (parse-args `(::add-ns ~@args)
+              [:map
+               [:namespace [:or keyword? string?]]]))
 
 (defn forward-until [& args]
-  `(::forward-until ~@args))
+  (parse-args `(::forward-until ~@args)
+              any-map-schema))
 
 (defn ignore [& args]
-  `(::ignore ~@args))
+  (parse-args `(::ignore ~@args)
+              any-map-schema))
 
 (defn result [& args]
-  `(::result ~@args))
+  (parse-args `(::result ~@args)
+              [:map
+               [:name [:or keyword? string?]]
+               [:expr any?]]))
 
 (defn union [& args]
   `(::union ~@args))
@@ -1051,7 +1128,27 @@
   `(::difference ~@args))
 
 (defn slice [& args]
-  `(::slice ~@args))
+  (parse-args `(::slice ~@args)
+              [:map
+               [:length number?]]))
+
+(defn iso-hull [& args]
+  (parse-args `(::iso-hull ~@args)
+              [:map
+               [:n-segments :pos-int]]))
+
+(defn import [& args]
+  (parse-args `(::import ~@args)
+              [:map
+               [:stl string?]]))
+
+(defn show-coordinate-frame [& args]
+  (parse-args `(::show-coordinate-frame ~@args)
+              [:map
+               [:radius number?]
+               [:length number?]
+               [:label string?]
+               [:frame-offset [:tuple :int :int :int]]]))
 
 (defn get-models [args]
   (for [arg args]
@@ -1099,15 +1196,6 @@
     (with-meta
       (conj (vec (vals all-modules)) result)
       (assoc (meta a) :modules all-modules :result result))))
-
-(defn iso-hull [& args]
-  `(::iso-hull ~@args))
-
-(defn import [& args]
-  `(::import ~@args))
-
-(defn show-coordinate-frame [& args]
-  `(::show-coordinate-frame ~@args))
 
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at ::list]} (parse-args (list* :na args))]

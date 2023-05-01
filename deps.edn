@@ -2,6 +2,7 @@
  :deps  {net.mikera/core.matrix {:mvn/version "0.62.0"}
          camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
+         metosin/malli {:mvn/version "0.11.0"}
          scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
  {:run-m   {:main-opts ["-m" "plexus.core"]}

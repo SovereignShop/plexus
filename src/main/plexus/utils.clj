@@ -1,13 +1,30 @@
 (ns plexus.utils
   (:require
    [clojure.core.matrix :as mat]
-   [scad-clj.model :as m]))
+   [scad-clj.model :as m]
+   [malli.core :as ma]))
 
 #_(mat/set-current-implementation :vectorz)
 
 (def pi Math/PI)
 
 (defn half [x] (/ x 2))
+
+(defn transform? [x]
+  (and (sequential? x)
+       (== (count x) 4)
+       (== (count (first x)) 4)))
+
+(def registry
+  (merge
+   (ma/class-schemas)
+   (ma/comparator-schemas)
+   (ma/base-schemas)
+   (ma/predicate-schemas)
+   {:neg-int (ma/-simple-schema {:type :neg-int, :pred neg-int?})
+    :pos-int (ma/-simple-schema {:type :pos-int, :pred pos-int?})
+    :transform (ma/-simple-schema {:type :transform :pred transform?})}))
+
 
 (defn rotation-vector
   "Rodrigues rotation formula"
