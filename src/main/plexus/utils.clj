@@ -166,7 +166,7 @@
     (cond
       (nil? x) true
 
-      (< (Math/abs (- x y)) 0.00001)
+      (< (abs (- x y)) 0.00001)
       (recur xs ys)
 
       :else false)))

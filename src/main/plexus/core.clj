@@ -621,15 +621,15 @@
         tfs (if (= gap true)
               []
               (all-transforms start-transform
-                                (fn [tf r d a]
-                                  (-> tf
-                                      (u/yaw r)
-                                      (u/go-forward d)
-                                      (u/yaw (- a r))))
-                                curve-radius
-                                angle
-                                n-faces
-                                transform-step-fn))
+                              (fn [tf r d a]
+                                (-> tf
+                                    (u/yaw r)
+                                    (u/go-forward d)
+                                    (u/yaw (- a r))))
+                              curve-radius
+                              angle
+                              n-faces
+                              transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
@@ -745,7 +745,7 @@
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
                        (cond->> shape
-                         true  (m/extrude-linear {:height (Math/abs length) :center center :twist twist})
+                         true  (m/extrude-linear {:height (abs length) :center center :twist twist})
                          (neg? length) (m/translate [0 0 length]))) m
                  (if mask
                    (m/difference m mask)
@@ -1010,19 +1010,46 @@
        form))
 
 (defn left
+  "Extrude an ego-centric left curve. Rotate-extrudes about a y-axis offset
+  along the ego-centric x axis by negative `:curve-radians`.
+
+  opts
+  :angle - number of radians to cufve.
+  :curve-radius - radius of the curve."
   [& opts]
   (validate-form `(::left ~@opts)
                  (ma/schema curve-schema)))
 
-(defn right [& opts]
+(defn right
+    "Extrude an ego-centric right curve. Rotate-extrudes about a y-axis offset
+  along the ego-centric x axis by `:curve-radians`.
+
+  opts
+  :angle - number of radians to cufve.
+  :curve-radius - radius of the curve."
+  [& opts]
   (validate-form `(::right ~@opts)
                  (ma/schema curve-schema)))
 
-(defn up [& opts]
+(defn up
+    "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
+  along the ego-centric y axis by negative `:curve-radians`.
+
+  opts
+  :angle - number of radians to cufve.
+  :curve-radius - radius of the curve."
+  [& opts]
   (validate-form `(::up ~@opts)
                  (ma/schema curve-schema)))
 
-(defn down [& opts]
+(defn down
+  "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
+  along the ego-centric x axis by `:curve-radians`.
+
+  opts
+  :angle - number of radians to cufve.
+  :curve-radius - radius of the curve."
+  [& opts]
   (validate-form `(::down ~@opts)
                  (ma/schema curve-schema)))
 
@@ -1030,17 +1057,44 @@
   (validate-form  `(::arc ~@opts)
                   (ma/schema curve-schema)))
 
-(defn roll [& opts]
+(defn roll
+  "Depricated. Use `(rotate :z rad)` instead.
+
+  Rotates the current transform set by `:angle` radians about the z axis.
+
+  opts
+  :angle - Radians of roll"
+  [& opts]
   (validate-form `(::roll ~@opts)
                  (ma/schema curve-schema)))
 
-(defn forward [& opts]
+(defn forward
+  "Extrude the model set forward.
+
+  opts:
+
+  :forward - Extrude in cannonical direction (along z axis)
+  :x - extrude along x axis
+  :y - extrude along y axis
+  :z - extrude along z axis
+  :twist - Twist radians while extruding. End transform matches the degree of twist.
+  :center - (default: false) whether extrusion should be centered at starting transform frame.
+  :branch? - (default: false) whether extrusion should be applied in a branch without updating
+             the transform.
+  :n-steps - Number of steps in the extrusion.
+  :transform-step-fn - A function (fn [tf i] tf) that is applied to each step. Note, this does not
+                       currently effect extrusion but is usefull for generating vertices when using
+                       `points`. "
+  [& opts]
   (validate-form `(::forward ~@opts) forward-schema))
 
-(defn backward [& opts]
+(defn backward
+  "Depreicated. Use `forward` with negative values instead."
+  [& opts]
   (validate-form `(::backward ~@opts) linear-extrude-schema))
 
-(defn hull [& opts]
+(defn hull
+  [& opts]
   (validate-form `(::hull ~@opts) any-map-schema))
 
 (defn model [& args]
@@ -1089,8 +1143,8 @@
 
 (defn to [& p]
   (let [[opts parsed-path] (parse-path p)
-        path* (map (fn [x]
-                     (assoc x :to (:models opts)))
+        path* (map (fn [[x & xs]]
+                     (list* x :to (:models opts) xs))
                    parsed-path)]
     (segment path*)))
 
@@ -1136,14 +1190,18 @@
                   [:name [:or keyword? string?]]
                   [:expr [:or keyword? [:sequential any?]]]]))
 
+
+(def result-op-schema
+  [:sequential [:or keyword? string? sequential?]])
+
 (defn union [& args]
-  `(::union ~@args))
+  (ma/coerce result-op-schema `(::union ~@args) nil {:registry u/registry}))
 
 (defn intersection [& args]
-  `(::intersection ~@args))
+  (ma/coerce result-op-schema `(::intersection ~@args) nil {:registry u/registry}))
 
 (defn difference [& args]
-  `(::difference ~@args))
+  (ma/coerce result-op-schema `(::difference ~@args) nil {:registry u/registry}))
 
 (defn slice [& args]
   (validate-form `(::slice ~@args)
@@ -1163,10 +1221,10 @@
 (defn show-coordinate-frame [& args]
   (validate-form `(::show-coordinate-frame ~@args)
                  [:map
-                  [:radius number?]
-                  [:length number?]
-                  [:label string?]
-                  [:frame-offset [:tuple :int :int :int]]]))
+                  [:radius {:optional true} number?]
+                  [:length {:optional true} number?]
+                  [:label {:optional true} string?]
+                  [:frame-offset {:optional true} [:tuple int? int? int?]]]))
 
 (defn get-models [args]
   (for [arg args]
@@ -1323,7 +1381,14 @@
           (path-models)
           (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))
 
-(defmacro points [& path*]
+(defmacro points
+  "Similar to `path`, but yields points.
+
+  opts
+
+  :axes - a vector describing which axes to select. For example, [:x :y]
+          to select the x,y coordinate from each vertex."
+  [& path*]
   (let [[opts path*] (parse-path path*)
         axes (or (:axes opts) [:x :y])
         meta-props (:meta-props opts)
