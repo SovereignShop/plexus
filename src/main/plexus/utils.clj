@@ -217,11 +217,11 @@
                 (m/extrude-rotate args)
                 (m/with-fn face-number))]
     (let [steps m/*fn*
-          shapes (for [idx (range 0 (inc steps))]
+          profiles (for [idx (range 0 (inc steps))]
                    (if step-fn (step-fn idx model) block))]
-      [(last shapes)
-       (->> (for [[idx shape] (map list (range (inc steps)) shapes)]
-              (->> (m/with-fn face-number shape)
+      [(last profiles)
+       (->> (for [[idx profile] (map list (range (inc steps)) profiles)]
+              (->> (m/with-fn face-number profile)
                    (m/rotatec [0 0 (- (/ Math/PI 2))])
                    (m/translate [curve-radius 0 0])
                    (m/extrude-rotate {:angle 0.02})
@@ -275,8 +275,8 @@
   (iso-hull (map (fn [seg]
                      (let [m (meta seg)
                            tf (:start-transform m)
-                           shape (:shape m)
-                           pts (:points (second shape))]
+                           profile (:profile m)
+                           pts (:points (second profile))]
                        (for [[x y] pts]
                          (-> tf
                              (go-forward x :x)

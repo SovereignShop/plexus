@@ -2,7 +2,7 @@
 
 Plexus defines a simple, extensible language for defining polygons and extruding them in a piecewise fashion using egocentric reference frames.
 
-You can specify 3D models by providing a series of extrusions to a set of shapes, which are then composited using CSG operations.
+You can specify 3D models by providing a series of extrusions to a set of profiles, which are then composited using CSG operations.
 
 # Status
 
@@ -10,21 +10,21 @@ Pre-alpha, syntax and internals likely to change.
  
 # Examples
 
-In the following example, our outer shape is a circle with radius of 6. The mask
-shape is a circle of radius 4. We then specify a series of egocentric transformations to the
-outer and inner shapes. 
+In the following example, our outer profile is a circle with radius of 6. The mask
+profile is a circle of radius 4. We then specify a series of egocentric transformations to the
+outer and inner profiles. 
 
 ``` clojure
 (require '[scad-clj.scad :as s]
-         '[scad-clj.body :as m]
-         '[plexus.core :refer [body left right forward up down hull path set branch]]
+         '[scad-clj.model :as m]
+         '[plexus.core :refer [frame left right forward up down hull extrude set branch]]
 
-(->> (path
+(->> (extrude
       (result :name :pipes 
               :expr (difference :outer :inner))
       
-      (body :shape (m/circle 6) :name :outer)
-      (body :shape (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer)
+      (frame :profile (m/circle 4) :name :inner)
       (set :curve-radius 20 :fn 70 :to [:outer]) (set :curve-radius 20 :fn 70 :to [:inner])
 
       (left :angle (/ Math/PI 2) :to [:outer]) (left :angle (/ Math/PI 2) :to [:inner])
@@ -35,17 +35,17 @@ outer and inner shapes.
      (spit "test.scad"))
 ```
 
-Obviously there is a lot of code duplication here. After providing the shape for the inner and outer forms,
+Obviously there is a lot of code duplication here. After providing the profile for the inner and outer forms,
 the transformations we apply to each are equivalent. We can get rid of that duplication by only providing one 
-transforming both shapes with each segment:
+transforming both profiles with each segment:
 
 ``` clojure
-(->> (path 
+(->> (extrude 
       (result :name :pipes
               :expr (difference :outer :inner))
                   
-      (body :shape (m/circle 6) :name :outer)
-      (body :shape (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer)
+      (frame :profile (m/circle 4) :name :inner)
       (set :curve-radius 20 :fn 70 :to [:outer :inner])
 
       (left :angle (/ Math/PI 2) :to [:outer :inner])
@@ -61,15 +61,15 @@ transforming both shapes with each segment:
 
 
 This is equivalent to the one above, but we can still see there is a lot of duplication. The `:to [:outer :inner]` is repeated in each segment.
-We can elide this, as by default each segement will reply to every body you have defined:
+We can elide this, as by default each segement will reply to every frame you have defined:
 
 ``` clojure
-(->> (path 
+(->> (extrude
       (result :name :pipes
               :expr (difference :outer :inner))
                    
-      (body :shape (m/circle 6) :name :outer)
-      (body :shape (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer)
+      (frame :profile (m/circle 4) :name :inner)
       (set :curve-radius 20 :fn 70)
 
       (left :angle (/ Math/PI 2))
@@ -81,33 +81,33 @@ We can elide this, as by default each segement will reply to every body you have
      (spit "test.scad"))
 ```
 
-This path is equivalent to the one above.
+This extrude is equivalent to the one above.
 
 ## Hulls
 
-Hulls are often a great way to transform between shapes using openscad. Hulls in plexus
-are applied in a stack-like fashion to the previous two shapes:
+Hulls are often a great way to transform between profiles using openscad. Hulls in plexus
+are applied in a stack-like fashion to the previous two profiles:
 
 ``` clojure
-(->> (path 
+(->> (extrude 
       (result :name :pipes
               :expr (difference :outer :inner))
                    
-      (body :shape (m/circle 6) :name :outer)
-      (body :shape (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer)
+      (frame :profile (m/circle 4) :name :inner)
       (set :curve-radius 20 :fn 70)
 
       (forward :length 20)
 
-      (set :shape (m/square 20 20) :to [:outer])
-      (set :shape (m/square 16 16) :to [:inner])
+      (set :profile (m/square 20 20) :to [:outer])
+      (set :profile (m/square 16 16) :to [:inner])
 
       (forward :length 20)
       (hull)
       (forward :length 20)
 
-      (set :shape (m/circle 6) :to [:outer])
-      (set :shape (m/circle 4) :to [:inner])
+      (set :profile (m/circle 6) :to [:outer])
+      (set :profile (m/circle 4) :to [:inner])
 
       (forward :length 20)
       (hull))
@@ -124,12 +124,12 @@ i.e. it pops the previous two segments off, hulls them, then pushes the result b
 Branches work as you'd expect:
 
 ``` clojure    
-(->> (path 
+(->> (extrude 
       (result :name :pipes
               :expr (difference :outer :inner))
               
-      (body :shape (m/circle 6) :name :outer)
-      (body :shape (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer)
+      (frame :profile (m/circle 4) :name :inner)
       (set :curve-radius 10 :fn 70)
 
       (branch :from :outer (left) (right) (forward :length 20))
@@ -141,17 +141,17 @@ Branches work as you'd expect:
 ![Branching Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
 
 
-The body of the branch is just another path. Notice the mask is not subtracted from the body until the full tree is constructed.
+The frame of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
 
 ## Gaps
 
 You can make any segment a gap with the gap parameter:
 
 ``` clojure
-(->> (path
+(->> (extrude
       (result :name :pipes
               :expr (difference :outer :inner))
-      (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
       (left :angle (/ Math/PI 2) :gap true)
       (right :angle (/ Math/PI 2))
       (left :gap true)
@@ -168,20 +168,20 @@ You can make any segment a gap with the gap parameter:
 
 ## Segments
 
-`segment` is kind of like a `do` in clojure. Importantly, they enable you to use loops in your path definition.
+`segment` is kind of like a `do` in clojure. Importantly, they enable you to use loops in your extrude definition.
 
 ``` clojure
-(->> (path
-     (result :name :pipes
-             :expr (difference :outer :inner))
-     (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-     (body :shape (m/circle 4) :name :inner)
-     (segment
-      (for [i (range 4)]
-        (branch
-         :from :outer
-         (rotate :x (* i 1/2 Math/PI))
-         (forward :length 30)))))
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :outer :inner))
+      (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (frame :profile (m/circle 4) :name :inner)
+      (segment
+       (for [i (range 4)]
+         (branch
+          :from :outer
+          (rotate :x (* i 1/2 Math/PI))
+          (forward :length 30)))))
     (s/write-scad)
     (spit "test.scad"))
 ```
@@ -191,14 +191,14 @@ You can make any segment a gap with the gap parameter:
 Also use `segment` to nest paths.
 
 ``` clojure
-(let [pipe-path (path
-                 (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-                 (body :shape (m/circle 4) :name :inner)
+(let [pipe-path (extrude
+                 (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+                 (frame :profile (m/circle 4) :name :inner)
                  (forward :length 30))]
-  (->> (path
+  (->> (extrude
         (result :name :pipes
                 :expr (difference :outer :inner))
-        (body :name :origin)
+        (frame :name :origin)
 
         (segment
          (for [i (range 4)]
@@ -215,13 +215,13 @@ This produces equivalent output to above. Notice the nested pipes-path inherits 
 
 ## Points
 
-`points` is similar to `path` except you use it to define 2D polygons. Here's an example of how to define a circle.
+`points` is similar to `extrude` except you use it to define 2D polygons. Here's an example of how to define a circle.
 
 ``` clojure
 (->> (m/polygon
       (points
        :axes [:x :z]
-       (body :name :origin :fn 20)
+       (frame :name :origin :fn 20)
        (translate :x 50)
        (left :angle (* 2 Math/PI) :curve-radius 50)))
      (s/write-scad)

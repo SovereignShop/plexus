@@ -12,14 +12,28 @@
    [camel-snake-kebab.core :as csk]
    [malli.core :as ma]))
 
+(def default-model
+  {:curve-radius 7
+   :profile nil
+   :fn 10
+   :order 0
+   :mask? false
+   :name :default
+   :models {}
+   :start-transform u/identity-mat
+   :end-transform u/identity-mat})
+
+(def default-state
+  {:models {}
+   ;; Saved-transforms
+   :transforms {}
+   :scope []
+   :curve-offset 0
+   :index -1
+   :coordinate-frames `()
+   :default-model default-model})
+
 (defmulti path-form (fn [_ args] (:op args)))
-
-(derive ::left ::curve)
-(derive ::right ::curve)
-(derive ::up ::curve)
-(derive ::down ::curve)
-
-(derive ::forward ::vector)
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
@@ -88,17 +102,6 @@
               (.replaceAll (csk/->snake_case (str (namespace name_)))
                            "\\." "_"))
             (csk/->snake_case (name name_))])))
-
-(def default-model
-  {:curve-radius 7
-   :shape nil
-   :fn 10
-   :order 0
-   :mask? false
-   :name :default
-   :models {}
-   :start-transform u/identity-mat
-   :end-transform u/identity-mat})
 
 (defn seg [model & args]
   (with-meta model (reduce conj default-model (partition 2 args))))
@@ -286,16 +289,8 @@
 (defn new-fn [model n]
   (postwalk (partial replace-fn n) model))
 
-(def default-state
-  {:models {}
-   :transforms {}
-   :scope []
-   :curve-offset 0
-   :index -1
-   :default-model default-model})
-
-(defn path*
-  ([path-forms] (path* nil path-forms))
+(defn extrude*
+  ([path-forms] (extrude* nil path-forms))
   ([state path-forms]
    (loop [{:keys [models index] :as state} (merge default-state state)
           [form & forms] (remove nil? path-forms)]
@@ -312,18 +307,18 @@
                    new-state (path-form (update state :index inc) args)]
                (recur new-state forms)))))))
 
-(defn path [& path-forms]
+(defn extrude [& path-forms]
   (let [[opts path_] (parse-path path-forms)]
-    (path* opts path_)))
+    (extrude* opts path_)))
 
 (defn model-impl* [ret args]
   (let [last-model (when-let [m (get (:models ret) (:last-model ret))]
                      (meta (peek m)))
-        model (into (or (dissoc last-model :shape)
+        model (into (or (dissoc last-model :profile)
                         (:default-model ret))
                     args)
         model (cond-> model
-                (:shape model) (update :shape new-fn (or (:fn args) (:fn model))))
+                (:profile model) (update :profile new-fn (or (:fn args) (:fn model))))
         model-name (:name model)
         existing-model (-> ret :models model-name)]
     (if existing-model
@@ -331,7 +326,7 @@
               (conj (pop existing-model)
                     (let [m (peek existing-model)]
                       (cond-> (vary-meta m merge args)
-                        (:shape args) (vary-meta  update :shape new-fn (or (:fn args) (:fn (meta (peek existing-model)))))
+                        (:profile args) (vary-meta  update :profile new-fn (or (:fn args) (:fn (meta (peek existing-model)))))
                         last-model (vary-meta merge  {:start-transform (:start-transform last-model)
                                                       :end-transform (:end-transform last-model)})))))
       (-> ret
@@ -357,7 +352,7 @@
                                  (assoc :index -1 :default-model model-data)
                                  (update :scope conj index))
                        with-models (update :models select-keys with-models))
-        m (path* branch-state (::list args))
+        m (extrude* branch-state (::list args))
         new-m (meta m)]
     (assoc state
            :modules (-> m meta :modules)
@@ -379,7 +374,7 @@
                                  (assoc :index -1 :default-model model-data)
                                  (update :scope conj index))
                        with-models (update :models select-keys with-models))
-        m (path* branch-state (::list args))
+        m (extrude* branch-state (::list args))
         new-m (meta m)]
     (assoc state
            :modules (-> m meta :modules)
@@ -392,15 +387,15 @@
 (defn ->keyword [namespace name*]
   (keyword (name namespace) (name name*)))
 
-(defn generate-shape [shape state]
+(defn generate-profile [profile state]
   (let [models (:models state)
         lookup-crossection (fn [e]
                              (let [model (e models)
                                    m (meta (peek model))
-                                   shape_ (:shape m)
+                                   profile_ (:profile m)
                                    tf (:start-transform m)
                                    rot (u/get-roll tf)]
-                               (->> shape_
+                               (->> profile_
                                     (m/rotatec [0 0 rot])
                                     #_(m/translate (subvec (u/translation-vector tf) 0 2)))))
         walk (fn walk [e]
@@ -411,7 +406,7 @@
                    ::union (apply m/union (map walk (next e)))
                    ::difference (apply m/difference (map walk (next e)))
                    e)))]
-    (walk shape)))
+    (walk profile)))
 
 (defmethod path-form ::save-transform
   [state args]
@@ -428,7 +423,7 @@
   (let [model-name (:name args)
         model (get (:models state) model-name)
         model-state (-> model peek meta)]
-    (update state :models assoc model-name (:shape model-state))))
+    (update state :models assoc model-name (:profile model-state))))
 
 (defmethod path-form ::result
   [state args]
@@ -447,20 +442,20 @@
             models
             (map (fn [[name model]]
                    (let [m-meta (meta (peek model))
-                         new-args (if (:shape args)
+                         new-args (if (:profile args)
                                     (-> args
-                                        (update :shape generate-shape state)
-                                        (update :shape new-fn (:fn m-meta)))
+                                        (update :profile generate-profile state)
+                                        (update :profile new-fn (:fn m-meta)))
                                     args)
                          m (f (if (:fn new-args)
-                                (conj (pop model) (vary-meta (peek model) update :shape new-fn (:fn new-args)))
+                                (conj (pop model) (vary-meta (peek model) update :profile new-fn (:fn new-args)))
                                 model)
                               (cond-> (assoc m-meta
                                              :op (:op new-args)
                                              :name name
                                              :start-transform (:end-transform (meta (peek model))))
                                 (:name new-args) (assoc :name (:name new-args))
-                                (:fn new-args) (update :shape new-fn (:fn new-args))
+                                (:fn new-args) (update :profile new-fn (:fn new-args))
                                 (:order new-args) (assoc :order (:order new-args)))
                               (dissoc new-args :to :gap))]
                      [name (let [m (if (contains? gap-models name)
@@ -550,30 +545,30 @@
                             (tf-fn transform r d step-angle)))
                         start-transform)))))
 
-(defn extrude-left [shape angle curve-radius n-faces]
+(defn extrude-left [profile angle curve-radius n-faces]
   (let [degrees (* angle 57.29578)]
     (binding [m/*fn* n-faces]
-      (->> shape
+      (->> profile
            (m/rotatec [Math/PI 0 0])
            (m/translate [curve-radius 0 0])
            (m/extrude-rotate {:angle degrees})
            (m/translate [(- curve-radius) 0 0])
            (m/rotatec [(/ Math/PI 2) 0 0])))))
 
-(defn extrude-right [shape angle curve-radius n-faces]
+(defn extrude-right [profile angle curve-radius n-faces]
   (let [degrees (* angle 57.29578)]
     (binding [m/*fn* n-faces]
-      (->> shape
+      (->> profile
            (m/translate [curve-radius 0 0])
            (m/extrude-rotate {:angle degrees})
            (m/translate [(- curve-radius) 0 0])
            (m/rotatec [(- (/ u/pi 2)) u/pi 0])))))
 
-(defn extrude-left-polyhedron [shape tfs n-faces]
+(defn extrude-left-polyhedron [profile tfs n-faces]
   (u/iso-hull
    (for [tf tfs]
-     (case (first shape)
-       :circle (let [r (:r (second shape))]
+     (case (first profile)
+       :circle (let [r (:r (second profile))]
                  (for [i (range n-faces)]
                    (-> tf
                        (u/rotate :z (* i (/ (* 2 Math/PI) n-faces)))
@@ -581,7 +576,7 @@
                        (u/translation-vector))))))))
 
 (def-segment-handler ::left
-  [ret {:keys [shape start-transform] :as ctx} args]
+  [ret {:keys [profile start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn
                 tesselation]
          :or {curve-radius (:curve-radius ctx)
@@ -617,8 +612,8 @@
                (u/go-forward d)
                (u/yaw (- (- angle r))))
         part (case tesselation
-               :default (extrude-left shape angle curve-radius n-faces)
-               :trivert-polyhedron (extrude-left-polyhedron shape tfs n-faces))]
+               :default (extrude-left profile angle curve-radius n-faces)
+               :trivert-polyhedron (extrude-left-polyhedron profile tfs n-faces))]
     (conj ret (with-meta part (assoc ctx
                                      :end-transform tf
                                      :all-transforms tfs
@@ -629,7 +624,7 @@
                                                        (u/go-forward curve-radius)))))))
 
 (def-segment-handler ::right
-  [ret {:keys [shape start-transform] :as ctx} args]
+  [ret {:keys [profile start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length curve-offset gap transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
               curve-offset (:curve-offset ctx)
@@ -642,7 +637,7 @@
                   (/ Math/PI 2)
                   angle))
         degrees (* angle 57.29578)
-        part (extrude-right shape angle curve-radius n-faces)
+        part (extrude-right profile angle curve-radius n-faces)
         tfs (if (= gap true)
               []
               (all-transforms start-transform
@@ -670,7 +665,7 @@
                                                        (u/go-forward curve-radius)))))))
 
 (def-segment-handler ::up
-  [ret {:keys [shape gap start-transform name] :as ctx} args]
+  [ret {:keys [profile gap start-transform name] :as ctx} args]
   (let [{:keys [curve-radius angle gap side-length elevation step-fn
                 transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
@@ -684,7 +679,7 @@
                   (/ Math/PI 2)
                   angle))
         degrees (* angle 57.29578)
-        [new-shape model]
+        [new-profile model]
         (binding [m/*fn* face-number]
           (u/extrude-rotate {:angle degrees
                              :face-number face-number
@@ -692,7 +687,7 @@
                              :model name
                              :curve-radius curve-radius
                              :step-fn step-fn}
-                            shape))
+                            profile))
         part (binding [m/*fn* face-number]
                (->> model
                     (m/translate [(- curve-radius) 0 0])
@@ -715,10 +710,10 @@
                (u/go-forward d)
                (u/go-forward elevation :x)
                (u/pitch (- angle r)))]
-    (conj ret (with-meta part (assoc ctx :end-transform tf :shape new-shape :all-transforms tfs)))))
+    (conj ret (with-meta part (assoc ctx :end-transform tf :profile new-profile :all-transforms tfs)))))
 
 (def-segment-handler ::down
-  [ret {:keys [shape start-transform] :as ctx} args]
+  [ret {:keys [profile start-transform] :as ctx} args]
   (let [{:keys [curve-radius angle side-length transform-step-fn]
          :or {curve-radius (:curve-radius ctx)
               transform-step-fn (fn [tf i])}} args
@@ -730,7 +725,7 @@
                   angle))
         degrees  (* angle 57.29578)
         part (binding [m/*fn* face-number]
-               (->> shape
+               (->> profile
                     (m/rotatec [0 0 (/ Math/PI 2)])
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
@@ -754,12 +749,12 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
-(defn extrude-forward [shape length center twist]
-  (cond->> shape
+(defn extrude-forward [profile length center twist]
+  (cond->> profile
     true  (m/extrude-linear {:height (abs length) :center center :twist twist})
     (neg? length) (m/translate [0 0 length])))
 
-(defn forward-impl* [ret {:keys [shape start-transform step-length n-steps] :as ctx} args]
+(defn forward-impl* [ret {:keys [profile start-transform step-length n-steps] :as ctx} args]
   (let [{:keys [x y length model twist mask center step-length n-steps branch? order tangent
                 transform-step-fn]
          :or {step-length step-length
@@ -768,13 +763,13 @@
         axis (cond x :x y :y :else :z)
         length (or length x y (:z args))
         step-length (or step-length (if n-steps (/ length n-steps) length))
-        shape (if (and (:fn args) (not= (:fn ctx) (:fn args)))
-                (new-fn shape (:fn args))
-                shape)
+        profile (if (and (:fn args) (not= (:fn ctx) (:fn args)))
+                (new-fn profile (:fn args))
+                profile)
         part (m/with-fn (or (:fn args) (:fn ctx))
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
-                       (extrude-forward shape length center twist)) m
+                       (extrude-forward profile length center twist)) m
                  (if mask
                    (m/difference m mask)
                    m)))
@@ -801,34 +796,34 @@
   (forward-impl* ret ctx args))
 
 (def-segment-handler ::offset
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+  [ret {:keys [fn profile start-transform] :as ctx} args]
   (let [{:keys [length offset]} args
-        new-shape  (m/offset offset
+        new-profile  (m/offset offset
                          (if (and (:fn args) (not= (:fn ctx) (:fn args)))
-                           (new-fn shape (or (:fn args) (:fn ctx)))
-                           shape))
+                           (new-fn profile (or (:fn args) (:fn ctx)))
+                           profile))
         part (m/with-fn fn
-               (cond->> new-shape
+               (cond->> new-profile
                  length (m/extrude-linear {:height length :center false})))
         tf (cond-> start-transform
              length (u/go-forward length))]
     (if length
-      (conj ret (with-meta part (assoc ctx :end-transform tf :shape new-shape)))
-      (conj (pop ret) (vary-meta (peek ret) assoc :shape new-shape)))))
+      (conj ret (with-meta part (assoc ctx :end-transform tf :profile new-profile)))
+      (conj (pop ret) (vary-meta (peek ret) assoc :profile new-profile)))))
 
 (def-segment-handler ::minkowski
-  [ret {:keys [fn shape start-transform] :as ctx} args]
-  (let [minkowski-shape (:shape args)
-        new-shape (m/minkowski minkowski-shape shape)]
-    (conj (pop ret) (vary-meta (peek ret) assoc :shape new-shape))))
+  [ret {:keys [fn profile start-transform] :as ctx} args]
+  (let [minkowski-profile (:profile args)
+        new-profile (m/minkowski minkowski-profile profile)]
+    (conj (pop ret) (vary-meta (peek ret) assoc :profile new-profile))))
 
 (def-segment-handler ::backward
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+  [ret {:keys [fn profile start-transform] :as ctx} args]
   (let [{:keys [length model twist mask center]}  args
         part (binding [m/*fn* fn]
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
-                       (->> shape
+                       (->> profile
                             (m/extrude-linear {:height length :center center :twist twist})
                             (m/translate [0 0 (- length)]))) m
                  (if mask
@@ -880,13 +875,13 @@
     (conj (pop ret) seg)))
 
 (def-segment-handler ::spin
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+  [ret {:keys [fn profile start-transform] :as ctx} args]
   (let [{:keys [angle axis]
          :or {angle (/ Math/PI 2)}} args
         degrees (* angle 57.29578)
         part (binding [m/*fn* fn]
                (->> (m/difference
-                     (cond->> shape
+                     (cond->> profile
                        (= axis :y) (m/rotatec [0 0 (/ Math/PI 2)]))
                      (->> (m/square 1000 1000)
                           (m/translate [-500 0])))
@@ -894,7 +889,7 @@
     (conj ret (with-meta part (assoc ctx :end-transform start-transform)))))
 
 (def-segment-handler ::arc
-  [ret {:keys [fn shape start-transform] :as ctx} args]
+  [ret {:keys [fn profile start-transform] :as ctx} args]
   (let [{:keys [curve-radius side-length]
          :or {curve-radius (:curve-radius ctx)
               side-length 10}} args
@@ -902,7 +897,7 @@
         degrees (* angle 57.29578)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         part (binding [m/*fn* fn]
-               (->> shape
+               (->> profile
                     (m/translate [curve-radius 0 0])
                     (m/extrude-rotate {:angle degrees})
                     (m/translate [(- curve-radius) 0 0])
@@ -923,8 +918,8 @@
     ret))
 
 (def-segment-handler ::union
-  [ret _ {:keys [shape]}]
-  (conj (pop ret) (vary-meta (peek ret) update :shape m/union shape)))
+  [ret _ {:keys [profile]}]
+  (conj (pop ret) (vary-meta (peek ret) update :profile m/union profile)))
 
 (def-segment-handler ::forward-until
   [ret {:keys [start-transform]} {:keys [x]}]
@@ -1016,12 +1011,12 @@
 
 (def model-schema
   [:map
-   [:shape {:optional true} [:sequential any?]]])
+   [:profile {:optional true} [:sequential any?]]])
 
-(def body-schema
+(def section-schema
   [:map
    [:name [:or keyword? string?]]
-   [:shape {:optional true} [:sequential any?]]])
+   [:profile {:optional true} [:sequential any?]]])
 
 (def any-map-schema
   (ma/schema [:map]))
@@ -1175,18 +1170,18 @@
 
 (defn to [& p]
   (let [[opts parsed-path] (parse-path p)
-        path* (map (fn [[x & xs]]
+        extrude* (map (fn [[x & xs]]
                      (list* x :to (:models opts) xs))
                    parsed-path)]
-    (segment path*)))
+    (segment extrude*)))
 
 (defn mask [& args]
   (validate-form `(::model ~@(conj (vec args) :mask? true))
                  model-schema))
 
-(defn body [& args]
+(defn frame [& args]
   (validate-form `(::model ~@(concat args [:mask? false]))
-                 body-schema))
+                 section-schema))
 
 (defn save-transform [& args]
   (validate-form `(::save-transform ~@args)
@@ -1329,30 +1324,30 @@
                          (add-ns :namespace namespace)
                          (segment list))))))))
 
-(defmacro defmodel [name & path*]
-  (let [[opts path*] (parse-path path*)]
+(defmacro defmodel [name & extrude*]
+  (let [[opts extrude*] (parse-path extrude*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
-         (path* (assoc default-state
+         (extrude* (assoc default-state
                        :name ~(str name)
                        :namespace ~(str *ns* "." name))
-                ~path*)))))
+                ~extrude*)))))
 
 (defmacro defmodel2 [& args]
-  (let [[opts path*] (parse-path path*)
+  (let [[opts extrude*] (parse-path extrude*)
         name (:name opts)
         result (:result opts)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
-         (path* (assoc default-state
+         (extrude* (assoc default-state
                        :name ~(str name)
                        :namespace ~(str *ns* "." name))
-                ~(cons result path*))))))
+                ~(cons result extrude*))))))
 
 
-(defn path-models [path*]
+(defn path-models [extrude*]
   (into {}
-        (for [[model-name model] (-> path* meta :models)]
+        (for [[model-name model] (-> extrude* meta :models)]
           [model-name
            [(m/union)
             (with-meta
@@ -1365,10 +1360,10 @@
               (-> model first meta))]])))
 
 (defn path-points
-  ([path*]
-   (path-points path* identity nil))
-  ([path* select-fn meta-props]
-   (vec (for [[_ model] (-> path* meta :models)
+  ([extrude*]
+   (path-points extrude* identity nil))
+  ([extrude* select-fn meta-props]
+   (vec (for [[_ model] (-> extrude* meta :models)
               [i seg] (map-indexed list (remove #(= (-> % meta :op) ::model) model))
               :let [m (meta seg)
                     tangent (:tangent m)
@@ -1405,9 +1400,9 @@
        :models models
        :path-spec path-spec})))
 
-(defmacro poly [& path*]
-  (let [[opts path*] (parse-path path*)]
-    `(let [p# (path* (assoc default-state :name ~(str name)) ~path*)
+(defmacro poly [& extrude*]
+  (let [[opts extrude*] (parse-path extrude*)]
+    `(let [p# (extrude* (assoc default-state :name ~(str name)) ~extrude*)
           m# (meta p#)]
       (-> p#
           (path-models)
@@ -1420,8 +1415,8 @@
 
   :axes - a vector describing which axes to select. For example, [:x :y]
           to select the x,y coordinate from each vertex."
-  [& path*]
-  (let [[opts path*] (parse-path path*)
+  [& extrude*]
+  (let [[opts extrude*] (parse-path extrude*)
         axes (or (:axes opts) [:x :y])
         meta-props (:meta-props opts)
         sym (gensym "tv-")
@@ -1430,19 +1425,19 @@
                     :x `(nth ~sym 0)
                     :y `(nth ~sym 1)
                     :z `(nth ~sym 2)))]
-    `(let [p# (path* (assoc default-state :name ~(str name)) ~path*)
+    `(let [p# (extrude* (assoc default-state :name ~(str name)) ~extrude*)
            m# (meta p#)]
        (with-meta
          (path-points p# (fn [~sym]
                            (vector ~@clauses)) ~meta-props)
          m#))))
 
-(defmacro defpoly [name & path*]
-  (let [[opts path*] (parse-path path*)]
-    `(binding [m/*fn* ~(get opts :fn 10)]
-       (def ~name
-         (let [p# (path* (assoc default-state :name ~(str name)) ~path*)
-               m# (meta p#)]
-           (-> p#
-               (path-models)
-               (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))))
+#_(defmacro defpoly [name & extrude*]
+    (let [[opts extrude*] (parse-path extrude*)]
+      `(binding [m/*fn* ~(get opts :fn 10)]
+         (def ~name
+           (let [p# (extrude* (assoc default-state :name ~(str name)) ~extrude*)
+                 m# (meta p#)]
+             (-> p#
+                 (path-models)
+                 (->model-tmp (:path-spec m#) (:transforms m#) ~(str name))))))))

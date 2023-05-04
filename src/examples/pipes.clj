@@ -7,8 +7,8 @@
             model rotate translate segment difference union intersection points]]))
 
 (->> (path
-      [(model :shape (m/circle 6) :mask? false :name :body)
-       (model :shape (m/circle 4) :mask? true :name :mask)
+      [(model :profile (m/circle 6) :mask? false :name :body)
+       (model :profile (m/circle 4) :mask? true :name :mask)
        (set :curve-radius 20 :fn 70 :to [:body]) (set :curve-radius 20 :fn 70 :to [:mask])
 
        (left :angle (/ Math/PI 2) :to [:body])
@@ -27,8 +27,8 @@
 
 ;; Or equivalently:
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-            (model :shape (m/circle 4) :mask? true :name :mask)
+(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
+            (model :profile (m/circle 4) :mask? true :name :mask)
             (set :curve-radius 20 :fn 70 :to [:body :mask])
 
             (left :angle (/ Math/PI 2) :to [:body :mask])
@@ -41,8 +41,8 @@
 
 ;; ... Or equivalently:
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-            (model :shape (m/circle 4) :mask? true :name :mask)
+(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
+            (model :profile (m/circle 4) :mask? true :name :mask)
             (set :curve-radius 20 :fn 70 :to [:body :mask])
 
             (left :angle (/ Math/PI 2))
@@ -55,21 +55,21 @@
 
 ;; Hulls
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-            (model :shape (m/circle 4) :mask? true :name :mask)
+(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
+            (model :profile (m/circle 4) :mask? true :name :mask)
             (set :curve-radius 20 :fn 70)
 
             (forward :length 20)
 
-            (set :shape (m/square 20 20) :to [:body])
-            (set :shape (m/square 16 16) :to [:mask])
+            (set :profile (m/square 20 20) :to [:body])
+            (set :profile (m/square 16 16) :to [:mask])
 
             (forward :length 20)
             (hull)
             (forward :length 20)
 
-            (set :shape (m/circle 6) :to [:body])
-            (set :shape (m/circle 4) :to [:mask])
+            (set :profile (m/circle 6) :to [:body])
+            (set :profile (m/circle 4) :to [:mask])
 
             (forward :length 20)
             (hull)])
@@ -78,8 +78,8 @@
 
 ;; Branching
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body)
-            (model :shape (m/circle 4) :mask? true :name :mask)
+(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
+            (model :profile (m/circle 4) :mask? true :name :mask)
             (set :curve-radius 10 :fn 70)
 
             (branch (left) (right) (forward :length 20))
@@ -89,7 +89,7 @@
 
 ;; Gaps
 
-(->> (path [(model :shape (m/circle 6) :mask? false :name :body :curve-radius 10 :fn 70)
+(->> (path [(model :profile (m/circle 6) :mask? false :name :body :curve-radius 10 :fn 70)
             (left :angle (/ Math/PI 2) :gap true)
             (right :angle (/ Math/PI 2))
             (left :gap true)
@@ -109,7 +109,7 @@
 ;; You can think of it as a two-point circle.
 
 (defmodel arc-torus
-  (model :shape (m/circle 2) :fn 50)
+  (model :profile (m/circle 2) :fn 50)
   (arc :side-length 20 :curve-radius 20)
   #_(arc :side-length 20 :curve-radius 20)
   #_(arc :side-length 20 :curve-radius 20)
@@ -126,8 +126,8 @@
 (->> (path
       (result :name :pipes
               :expr (difference :outer :inner))
-      (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-      (body :shape (m/circle 4) :name :inner)
+      (body :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (body :profile (m/circle 4) :name :inner)
       (segment
        (for [i (range 4)]
          (branch
@@ -138,8 +138,8 @@
      (spit "test.scad"))
 
 (let [pipe-path (path
-                 (body :shape (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-                 (body :shape (m/circle 4) :name :inner)
+                 (body :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+                 (body :profile (m/circle 4) :name :inner)
                  (forward :length 30))]
   (->> (path
         (result :name :pipes

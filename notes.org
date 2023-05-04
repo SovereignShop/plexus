@@ -5,8 +5,8 @@
 ** Offset after branch
 #+begin_src clojure
 (defmodel bug
-  (body :shape (m/circle 75/2) :name :body)
-  (mask :shape (m/circle 25/2) :name :mask)
+  (body :profile (m/circle 75/2) :name :body)
+  (mask :profile (m/circle 25/2) :name :mask)
   (forward :length 3 :to [:body])
   (branch
    :from :body
