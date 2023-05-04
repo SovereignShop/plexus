@@ -550,12 +550,44 @@
                             (tf-fn transform r d step-angle)))
                         start-transform)))))
 
+(defn extrude-left [shape angle curve-radius n-faces]
+  (let [degrees (* angle 57.29578)]
+    (binding [m/*fn* n-faces]
+      (->> shape
+           (m/rotatec [Math/PI 0 0])
+           (m/translate [curve-radius 0 0])
+           (m/extrude-rotate {:angle degrees})
+           (m/translate [(- curve-radius) 0 0])
+           (m/rotatec [(/ Math/PI 2) 0 0])))))
+
+(defn extrude-right [shape angle curve-radius n-faces]
+  (let [degrees (* angle 57.29578)]
+    (binding [m/*fn* n-faces]
+      (->> shape
+           (m/translate [curve-radius 0 0])
+           (m/extrude-rotate {:angle degrees})
+           (m/translate [(- curve-radius) 0 0])
+           (m/rotatec [(- (/ u/pi 2)) u/pi 0])))))
+
+(defn extrude-left-polyhedron [shape tfs n-faces]
+  (u/iso-hull
+   (for [tf tfs]
+     (case (first shape)
+       :circle (let [r (:r (second shape))]
+                 (for [i (range n-faces)]
+                   (-> tf
+                       (u/rotate :z (* i (/ (* 2 Math/PI) n-faces)))
+                       (u/go-forward r :x)
+                       (u/translation-vector))))))))
+
 (def-segment-handler ::left
   [ret {:keys [shape start-transform] :as ctx} args]
-  (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn]
+  (let [{:keys [curve-radius angle side-length curve-offset tangent gap transform-step-fn
+                tesselation]
          :or {curve-radius (:curve-radius ctx)
               curve-offset (:curve-offset ctx)
-              transform-step-fn (fn [tf angle] tf)}} args
+              transform-step-fn (fn [tf angle] tf)
+              tesselation :default}} args
         n-faces (or (:fn args) (:fn ctx))
         curve-radius (+ curve-radius curve-offset)
         angle (if (and side-length (not angle))
@@ -563,14 +595,8 @@
                 (if (not angle)
                   (/ Math/PI 2)
                   angle))
-        degrees (* angle 57.29578)
-        part (binding [m/*fn* n-faces]
-               (->> shape
-                    (m/rotatec [Math/PI 0 0])
-                    (m/translate [curve-radius 0 0])
-                    (m/extrude-rotate {:angle degrees})
-                    (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [(/ Math/PI 2) 0 0])))
+
+
         tfs (if (= gap true)
               []
               (all-transforms start-transform
@@ -583,12 +609,16 @@
                               angle
                               n-faces
                               transform-step-fn))
+
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
         tf (-> start-transform
                (u/yaw (- r))
                (u/go-forward d)
-               (u/yaw (- (- angle r))))]
+               (u/yaw (- (- angle r))))
+        part (case tesselation
+               :default (extrude-left shape angle curve-radius n-faces)
+               :trivert-polyhedron (extrude-left-polyhedron shape tfs n-faces))]
     (conj ret (with-meta part (assoc ctx
                                      :end-transform tf
                                      :all-transforms tfs
@@ -612,12 +642,7 @@
                   (/ Math/PI 2)
                   angle))
         degrees (* angle 57.29578)
-        part (binding [m/*fn* n-faces]
-               (->> shape
-                    (m/translate [curve-radius 0 0])
-                    (m/extrude-rotate {:angle degrees})
-                    (m/translate [(- curve-radius) 0 0])
-                    (m/rotatec [(- (/ u/pi 2)) u/pi 0])))
+        part (extrude-right shape angle curve-radius n-faces)
         tfs (if (= gap true)
               []
               (all-transforms start-transform
@@ -632,12 +657,12 @@
                               transform-step-fn))
         d (u/bAc->a curve-radius angle curve-radius)
         r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
-        tf (-> start-transform
-               (u/yaw r)
-               (u/go-forward d)
-               (u/yaw (- angle r)))]
+        end-tf (-> start-transform
+                   (u/yaw r)
+                   (u/go-forward d)
+                   (u/yaw (- angle r)))]
     (conj ret (with-meta part (assoc ctx
-                                     :end-transform tf
+                                     :end-transform end-tf
                                      :all-transforms tfs
                                      :curve-radius curve-radius
                                      :curve-origin (-> start-transform
@@ -729,6 +754,11 @@
                 (u/pitch (- (- angle r))))]
     (conj ret (with-meta part (assoc ctx :end-transform tf :all-transforms tfs)))))
 
+(defn extrude-forward [shape length center twist]
+  (cond->> shape
+    true  (m/extrude-linear {:height (abs length) :center center :twist twist})
+    (neg? length) (m/translate [0 0 length])))
+
 (defn forward-impl* [ret {:keys [shape start-transform step-length n-steps] :as ctx} args]
   (let [{:keys [x y length model twist mask center step-length n-steps branch? order tangent
                 transform-step-fn]
@@ -744,9 +774,7 @@
         part (m/with-fn (or (:fn args) (:fn ctx))
                (as-> (if model
                        (new-fn model (or (:fn args) (:fn ctx)))
-                       (cond->> shape
-                         true  (m/extrude-linear {:height (abs length) :center center :twist twist})
-                         (neg? length) (m/translate [0 0 length]))) m
+                       (extrude-forward shape length center twist)) m
                  (if mask
                    (m/difference m mask)
                    m)))
@@ -908,7 +936,6 @@
     (/ dx (Math/cos angle))
     ret))
 
-
 (defn pythag-distance [[x1 y1 z1]
                        [x2 y2 z2]]
   (Math/sqrt (+ (Math/pow (- x2 x1) 2)
@@ -989,6 +1016,11 @@
 
 (def model-schema
   [:map
+   [:shape {:optional true} [:sequential any?]]])
+
+(def body-schema
+  [:map
+   [:name [:or keyword? string?]]
    [:shape {:optional true} [:sequential any?]]])
 
 (def any-map-schema
@@ -1154,7 +1186,7 @@
 
 (defn body [& args]
   (validate-form `(::model ~@(concat args [:mask? false]))
-                 model-schema))
+                 body-schema))
 
 (defn save-transform [& args]
   (validate-form `(::save-transform ~@args)
