@@ -2,12 +2,13 @@
   (:require
    [scad-clj.model :as m]
    [clojure.core.matrix :as mat]
-   [plexus.utils :as u]))
+   [plexus.utils :as u]
+   [plexus.transforms :as tf]))
 
 (defn get-rotation
   "Get rotation transform to start of segment."
   [segment]
-  (-> segment meta :start-transform u/rotation-matrix))
+  (-> segment meta :start-transform tf/rotation-matrix))
 
 (defn get-transform
   "Get start transformation matrix."
@@ -27,16 +28,16 @@
 (defn get-translation
   "Get transform to end of segment."
   [segment]
-  (-> segment meta :start-transform u/translation-vector))
+  (-> segment meta :start-transform tf/translation-vector))
 
 (defn set-translation [segment translation]
-  (vary-meta segment update :end-transform u/translate translation))
+  (vary-meta segment update :end-transform tf/set-translation translation))
 
 (defn- set-meta [meta segment]
   (with-meta segment meta))
 
 (defn roll [segment angle]
-  (set-transform (u/roll (get-transform segment) angle) segment))
+  (set-transform (tf/roll (get-transform segment) angle) segment))
 
 (defn get-sub-segment [segment n]
   (-> segment meta :segments (nth n)))
@@ -47,13 +48,12 @@
   (let [met (meta segment)]
     (if (:projected met)
       segment
-      (let [m (get-transform segment)
-            translation (u/translation-vector m)
-            a (get-rotation segment)
-            b (u/rotation-matrix u/identity-mat)
-            [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-            c (u/rotate33 a ortho angle)
-            [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
+      (let [a (get-transform segment)
+            translation (tf/translation-vector a)
+            b tf/identity-tf
+            [angle ortho] (tf/rotation-axis-and-angle (tf/rx a) (tf/rx b) [0 0 1])
+            c (tf/rotate a ortho angle)
+            [angle-2 ortho-2] (tf/rotation-axis-and-angle (tf/ry b) (tf/ry c) (tf/rx c))]
         (with-meta
           (->> segment
                (m/translate (mat/mul -1 translation))
@@ -68,12 +68,12 @@
     (if (:projected met)
       segment
       (let [m (get-transform segment)
-            translation (u/translation-vector m)
-            a (u/rotation-matrix u/identity-mat)
-            b (get-rotation segment)
-            [angle ortho] (u/rotation-axis-and-angle (nth a 0) (nth b 0) [0 0 1])
-            c (u/rotate33 a ortho angle)
-            [angle-2 ortho-2] (u/rotation-axis-and-angle (nth b 1) (nth c 1) (nth c 0))]
+            translation (tf/translation-vector m)
+            a tf/identity-tf
+            b (get-transform segment)
+            [angle ortho] (tf/rotation-axis-and-angle (tf/rx a) (tf/rx b) [0 0 1])
+            c (tf/rotate a ortho angle)
+            [angle-2 ortho-2] (tf/rotation-axis-and-angle (tf/ry b) (tf/ry c) (tf/rx c))]
         (with-meta
           (->> segment
                (m/rotatev angle ortho)
