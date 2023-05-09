@@ -238,7 +238,7 @@ or more. Furthermore, it provides the strongest correctness guarantees of all th
 
 ## Recipe for using Plexus with Emacs
 
-You can do something like this to 
+You can do something like this to integrate with emacs/cider:
 
 ``` emacs-lisp
 
