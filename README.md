@@ -234,7 +234,7 @@ This produces equivalent output to above. Notice the nested pipes-path inherits 
 ## Enable Manifold CSG algorithm in OpenSCAD
 
 Until Plexus supports Manifold directly, it is important to enable Manifold as the CSG engine in OpenSCAD. Manifold DRAMATICALLY improves on the default CSG engine in OpenSCAD, often reducing rendering time by 1000x
-or more. It's is the algorithm that provides the strongest correctness guarantees. In the future, Plexus will use Manifold directly and will not depend on OpenSCAD.
+or more. Furthermore, it provides the strongest correctness guarantees of all the CSG engines OpenSCAD supports. In the future, Plexus will use Manifold directly and will not depend on OpenSCAD.
 
 ## Recipe for using Plexus with Emacs
 
