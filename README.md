@@ -249,7 +249,7 @@ You can do something like this to integrate with emacs/cider:
  (funcall (-applify #'concat)
           (-map (lambda (x) (concat"(scad-clj.model/use \"" x "\")\n")) libs)))
  
-(defun cider-eval-scad-render-at-point ()
+(defun cider-eval-plexus-render-at-point ()
   (interactive)
   (cider-interactive-eval
    (format "
@@ -274,7 +274,7 @@ This way you can render an extrusion with just a keystroke. Assuming your using 
 
 ``` emacs-lisp
 (map! (:map cider-mode-map
-       :n "SPC m e S" #'cider-eval-scad-render-at-point))
+       :n "SPC m e S" #'cider-eval-plexus-render-at-point))
 ```
 
 
