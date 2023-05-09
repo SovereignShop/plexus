@@ -3,99 +3,121 @@
    [scad-clj.scad :as s]
    [scad-clj.model :as m]
    [plexus.core
-    :refer [result body left right forward up down hull path set branch arc defmodel
-            model rotate translate segment difference union intersection points]]))
+    :refer [result frame left right forward up down hull extrude set branch arc defmodel
+            rotate translate segment difference union intersection points]]))
 
-(->> (path
-      [(model :profile (m/circle 6) :mask? false :name :body)
-       (model :profile (m/circle 4) :mask? true :name :mask)
-       (set :curve-radius 20 :fn 70 :to [:body]) (set :curve-radius 20 :fn 70 :to [:mask])
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :body :mask))
 
-       (left :angle (/ Math/PI 2) :to [:body])
-       (left :angle (/ Math/PI 2) :to [:mask])
+      (frame :profile (m/circle 6) :name :body)
+      (frame :profile (m/circle 4) :name :mask)
+      (set :curve-radius 20 :fn 70 :to [:body]) (set :curve-radius 20 :fn 70 :to [:mask])
 
-       (right :angle (/ Math/PI 2) :to [:body])
-       (right :angle (/ Math/PI 2) :to [:mask])
+      (left :angle (/ Math/PI 2) :to [:body])
+      (left :angle (/ Math/PI 2) :to [:mask])
 
-       (forward :length 10 :to [:body])
-       (forward :length 10 :to [:mask])
+      (right :angle (/ Math/PI 2) :to [:body])
+      (right :angle (/ Math/PI 2) :to [:mask])
 
-       (up :to [:body])
-       (up :to [:mask])])
+      (forward :length 10 :to [:body])
+      (forward :length 10 :to [:mask])
+
+      (up :to [:body])
+      (up :to [:mask]))
      (s/write-scad)
      (spit "test.scad"))
 
 ;; Or equivalently:
 
-(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
-            (model :profile (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 20 :fn 70 :to [:body :mask])
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :body :mask))
 
-            (left :angle (/ Math/PI 2) :to [:body :mask])
-            (right :angle (/ Math/PI 2) :to [:body :mask])
-            (forward :length 10 :to [:body :mask])
-            (up :to [:body :mask])
-            (forward :length 20 :to [:body :mask])])
+      (frame :profile (m/circle 6) :name :body)
+      (frame :profile (m/circle 4) :name :mask)
+      (set :curve-radius 20 :fn 70 :to [:body :mask])
+
+      (left :angle (/ Math/PI 2) :to [:body :mask])
+      (right :angle (/ Math/PI 2) :to [:body :mask])
+      (forward :length 10 :to [:body :mask])
+      (up :to [:body :mask])
+      (forward :length 20 :to [:body :mask]))
      (s/write-scad)
      (spit "test.scad"))
 
 ;; ... Or equivalently:
 
-(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
-            (model :profile (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 20 :fn 70 :to [:body :mask])
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :body :mask))
 
-            (left :angle (/ Math/PI 2))
-            (right :angle (/ Math/PI 2))
-            (forward :length 10)
-            (up :to [:body :mask])
-            (forward :length 20)])
+      (frame :profile (m/circle 6) :name :body)
+      (frame :profile (m/circle 4) :name :mask)
+      (set :curve-radius 20 :fn 70 :to [:body :mask])
+
+      (left :angle (/ Math/PI 2))
+      (right :angle (/ Math/PI 2))
+      (forward :length 10)
+      (up :to [:body :mask])
+      (forward :length 20))
      (s/write-scad)
      (spit "test.scad"))
 
 ;; Hulls
 
-(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
-            (model :profile (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 20 :fn 70)
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :body :mask))
 
-            (forward :length 20)
+      (frame :profile (m/circle 6) :name :body)
+      (frame :profile (m/circle 4) :name :mask)
+      (set :curve-radius 20 :fn 70)
 
-            (set :profile (m/square 20 20) :to [:body])
-            (set :profile (m/square 16 16) :to [:mask])
+      (forward :length 20)
 
-            (forward :length 20)
-            (hull)
-            (forward :length 20)
+      (set :profile (m/square 20 20) :to [:body])
+      (set :profile (m/square 16 16) :to [:mask])
 
-            (set :profile (m/circle 6) :to [:body])
-            (set :profile (m/circle 4) :to [:mask])
+      (forward :length 20)
+      (hull)
+      (forward :length 20)
 
-            (forward :length 20)
-            (hull)])
+      (set :profile (m/circle 6) :to [:body])
+      (set :profile (m/circle 4) :to [:mask])
+
+      (forward :length 20)
+      (hull))
      (s/write-scad)
      (spit "test.scad"))
 
 ;; Branching
 
-(->> (path [(model :profile (m/circle 6) :mask? false :name :body)
-            (model :profile (m/circle 4) :mask? true :name :mask)
-            (set :curve-radius 10 :fn 70)
+(def pi|2 (/ Math/PI 2))
 
-            (branch (left) (right) (forward :length 20))
-            (branch (right) (left) (forward :length 20))])
+(->> (extrude
+      (result :name :pipes
+              :expr (difference :body :mask))
+
+      (frame :profile (m/circle 6) :name :body)
+      (frame :profile (m/circle 4) :name :mask)
+      (set :curve-radius 10 :fn 70)
+
+      (branch :from :body (left :angle pi|2) (right :angle pi|2) (forward :length 20))
+      (branch :from :body (right :angle pi|2) (left :angle pi|2) (forward :length 20)))
      (s/write-scad)
      (spit "test.scad"))
 
 ;; Gaps
 
-(->> (path [(model :profile (m/circle 6) :mask? false :name :body :curve-radius 10 :fn 70)
-            (left :angle (/ Math/PI 2) :gap true)
-            (right :angle (/ Math/PI 2))
-            (left :gap true)
-            (right)
-            (left :gap true)
-            (right)])
+(->> (extrude
+      (frame :profile (m/circle 6) :name :body :curve-radius 10 :fn 70)
+      (left :angle (/ Math/PI 2) :gap true)
+      (right :angle (/ Math/PI 2))
+      (left :gap true)
+      (right)
+      (left :gap true)
+      (right))
      (s/write-scad)
      (spit "test.scad"))
 
@@ -109,8 +131,11 @@
 ;; You can think of it as a two-point circle.
 
 (defmodel arc-torus
-  (model :profile (m/circle 2) :fn 50)
-  (arc :side-length 20 :curve-radius 20)
+  (result :name :arc-torus
+          :expr :body)
+
+  (frame :profile (m/circle 2) :fn 50 :name :body)
+  (arc :side-length 20 :curve-radius 5)
   #_(arc :side-length 20 :curve-radius 20)
   #_(arc :side-length 20 :curve-radius 20)
   #_(arc :side-length 20 :curve-radius 20)
@@ -123,11 +148,11 @@
 
 ;; Segment
 
-(->> (path
+(->> (extrude
       (result :name :pipes
               :expr (difference :outer :inner))
-      (body :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-      (body :profile (m/circle 4) :name :inner)
+      (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+      (frame :profile (m/circle 4) :name :inner)
       (segment
        (for [i (range 4)]
          (branch
@@ -137,14 +162,14 @@
      (s/write-scad)
      (spit "test.scad"))
 
-(let [pipe-path (path
-                 (body :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-                 (body :profile (m/circle 4) :name :inner)
+(let [pipe-path (extrude
+                 (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
+                 (frame :profile (m/circle 4) :name :inner)
                  (forward :length 30))]
-  (->> (path
+  (->> (extrude
         (result :name :pipes
                 :expr (difference :outer :inner))
-        (body :name :origin)
+        (frame :name :origin)
 
         (segment
          (for [i (range 4)]
@@ -160,7 +185,7 @@
 (->> (m/polygon
       (points
        :axes [:x :z]
-       (body :name :origin :fn 20)
+       (frame :name :origin :fn 20)
        (translate :x 50)
        (left :angle (* 2 Math/PI) :curve-radius 50)))
      (s/write-scad)
