@@ -4,7 +4,6 @@
    [clojure.string :as string]
    [clojure.core.matrix :as mat]
    [clojure.walk :refer [postwalk]]
-   #_[scad-clj.scad :as s]
    [plexus.segment :as sg]
    [plexus.transforms :as tf]
    [plexus.triangles :as triangles]

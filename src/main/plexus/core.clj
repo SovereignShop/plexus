@@ -3,51 +3,9 @@
   (:require
    [plexus.utils :as u]
    [plexus.impl :as impl]
+   [plexus.schema :as schema :refer [validate-form]]
    [scad-clj.model :as m]
    [malli.core :as ma]))
-
-(def curve-schema
-  (ma/schema [:map
-              [:angle {:optional true} number?]
-              [:curve-radius {:optional true} number?]]))
-
-(def linear-extrude-schema
-  (ma/schema [:and
-              [:map
-               [:length {:optional true} number?]
-               [:x {:optional true} number?]
-               [:y {:optional true} number?]
-               [:z {:optional true} number?]]
-              [:fn {:error/message "x, y, z, and length are mutually exclusive."}
-               (fn [{:keys [x y z length]}]
-                 (= 1 (count (remove nil? [x y z length]))))]]))
-
-(def model-schema
-  [:map
-   [:profile {:optional true} [:sequential any?]]])
-
-(def section-schema
-  [:map
-   [:name [:or keyword? string?]]
-   [:profile {:optional true} [:sequential any?]]])
-
-(def any-map-schema
-  (ma/schema [:map]))
-
-(def forward-schema
-  [:and
-   [:map
-    [:x {:optional true} number?]
-    [:y {:optional true} number?]
-    [:z {:optional true} number?]
-    [:length {:optional true} number?]]
-   [:fn {:error/message "x, y, z, and length are mutually exclusive."}
-    (fn [{:keys [x y z length]}]
-      (= 1 (count (remove nil? [x y z length]))))]])
-
-(defn validate-form [form schema]
-  (and (impl/parse-args form schema)
-       form))
 
 (defn extrude-to
   [& opts]
@@ -61,8 +19,7 @@
   :angle - number of radians to cufve.
   :curve-radius - radius of the curve."
   [& opts]
-  (validate-form `(:plexus.impl/left ~@opts)
-                 (ma/schema curve-schema)))
+  (validate-form `(:plexus.impl/left ~@opts) schema/curve-schema))
 
 (defn right
     "Extrude an ego-centric right curve. Rotate-extrudes about a y-axis offset
@@ -72,8 +29,7 @@
   :angle - number of radians to cufve.
   :curve-radius - radius of the curve."
   [& opts]
-  (validate-form `(:plexus.impl/right ~@opts)
-                 (ma/schema curve-schema)))
+  (validate-form `(:plexus.impl/right ~@opts) schema/curve-schema))
 
 (defn up
     "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
@@ -83,8 +39,7 @@
   :angle - number of radians to cufve.
   :curve-radius - radius of the curve."
   [& opts]
-  (validate-form `(:plexus.impl/up ~@opts)
-                 (ma/schema curve-schema)))
+  (validate-form `(:plexus.impl/up ~@opts) schema/curve-schema))
 
 (defn down
   "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
@@ -94,12 +49,10 @@
   :angle - number of radians to cufve.
   :curve-radius - radius of the curve."
   [& opts]
-  (validate-form `(:plexus.impl/down ~@opts)
-                 (ma/schema curve-schema)))
+  (validate-form `(:plexus.impl/down ~@opts) schema/curve-schema))
 
 (defn arc [& opts]
-  (validate-form  `(:plexus.impl/arc ~@opts)
-                  (ma/schema curve-schema)))
+  (validate-form  `(:plexus.impl/arc ~@opts) schema/curve-schema))
 
 (defn roll
   "Depricated. Use `(rotate :z rad)` instead.
@@ -109,8 +62,7 @@
   opts
   :angle - Radians of roll"
   [& opts]
-  (validate-form `(:plexus.impl/roll ~@opts)
-                 (ma/schema curve-schema)))
+  (validate-form `(:plexus.impl/roll ~@opts) schema/curve-schema))
 
 (defn forward
   "Extrude the model set forward.
@@ -130,43 +82,28 @@
                        currently effect extrusion but is usefull for generating vertices when using
                        `points`. "
   [& opts]
-  (validate-form `(:plexus.impl/forward ~@opts) forward-schema))
+  (validate-form `(:plexus.impl/forward ~@opts) schema/forward-schema))
 
 (defn backward
   "Depreicated. Use `forward` with negative values instead."
   [& opts]
-  (validate-form `(:plexus.impl/backward ~@opts) linear-extrude-schema))
+  (validate-form `(:plexus.impl/backward ~@opts) schema/linear-extrude-schema))
 
 (defn hull
   [& opts]
-  (validate-form `(:plexus.impl/hull ~@opts) any-map-schema))
+  (validate-form `(:plexus.impl/hull ~@opts) schema/any-map-schema))
 
 (defn model [& args]
   (validate-form `(:plexus.impl/model ~@args) model-schema))
 
 (defn translate [& args]
-  (validate-form `(:plexus.impl/translate ~@args)
-                 (ma/schema
-                  [:and [:map
-                         [:x {:optional true} number?]
-                         [:y {:optional true} number?]
-                         [:z {:optional true} number?]
-                         [:global? {:optional true} :boolean]]
-                   [:fn {:error/message "Must include x, y, and/or z."}
-                    (fn [{:keys [x y z]}]
-                      (or x y z))]])))
+  (validate-form `(:plexus.impl/translate ~@args) schema/translate-schema))
 
 (defn rotate [& args]
-  (validate-form `(:plexus.impl/rotate ~@args)
-                 (ma/schema [:map
-                             [:x {:optional true} number?]
-                             [:y {:optional true} number?]
-                             [:z {:optional true} number?]])))
+  (validate-form `(:plexus.impl/rotate ~@args) schema/rotate-schema))
 
 (defn transform [& args]
-  (validate-form `(:plexus.impl/transform ~@args)
-                 [:map
-                  [:transform :transform]]))
+  (validate-form `(:plexus.impl/transform ~@args) schema/transform-schema))
 
 (defn spin [& args]
   (validate-form `(:plexus.impl/spin ~@args)
@@ -177,13 +114,10 @@
                  any-map-schema))
 
 (defn branch [& args]
-  (validate-form `(:plexus.impl/branch ~@args)
-                 (ma/schema [:map
-                             [:from [:or keyword? string?]]
-                             [:with {:optional true} [:vector [:or keyword? string?]]]])))
+  (validate-form `(:plexus.impl/branch ~@args) schema/branch-schema))
 
 (defn segment [& args]
-  (validate-form `(:plexus.impl/segment ~@args) any-map-schema))
+  (validate-form `(:plexus.impl/segment ~@args) schema/any-map-schema))
 
 (defn to [& p]
   (let [[opts parsed-path] (impl/parse-path p)
@@ -193,82 +127,76 @@
     (segment extrude*)))
 
 (defn mask [& args]
-  (validate-form `(:plexus.impl/model ~@(conj (vec args) :mask? true))
-                 model-schema))
+  (validate-form `(:plexus.impl/model ~@(conj (vec args) :mask? true)) schema/model-schema))
 
 (defn frame [& args]
-  (validate-form `(:plexus.impl/model ~@(concat args [:mask? false]))
-                 section-schema))
+  (validate-form `(:plexus.impl/model ~@(concat args [:mask? false])) schema/frame-schema))
 
 (defn save-transform [& args]
-  (validate-form `(:plexus.impl/save-transform ~@args)
-                 [:map
-                  [:name [:or keyword? string?]]
-                  [:frame [:or keyword? string?]]]))
+  (validate-form `(:plexus.impl/save-transform ~@args) schema/save-transform-schema))
 
 (defn offset [& args]
-  (validate-form `(:plexus.impl/offset ~@args)
-                 [:map
-                  [:offset number?]]))
+  (validate-form `(:plexus.impl/offset ~@args) schema/offset-schema))
 
 (defn minkowski [& args]
-  (validate-form `(:plexus.impl/minkowski ~@args)
-                 any-map-schema))
+  (validate-form `(:plexus.impl/minkowski ~@args) schema/any-map-schema))
 
 (defn add-ns [& args]
-  (validate-form `(:plexus.impl/add-ns ~@args)
-                 [:map
-                  [:namespace [:or keyword? string?]]]))
+  (validate-form `(:plexus.impl/add-ns ~@args) schema/add-ns-schema))
 
 (defn forward-until [& args]
-  (validate-form `(:plexus.impl/forward-until ~@args)
-                 any-map-schema))
+  (validate-form `(:plexus.impl/forward-until ~@args) schema/any-map-schema))
 
 (defn ignore [& args]
-  (validate-form `(:plexus.impl/ignore ~@args)
-                 any-map-schema))
+  (validate-form `(:plexus.impl/ignore ~@args) schema/any-map-schema))
 
 (defn result [& args]
-  (validate-form `(:plexus.impl/result ~@args)
-                 [:map
-                  [:name [:or keyword? string?]]
-                  [:expr [:or keyword? [:sequential any?]]]]))
-
-
-(def result-op-schema
-  [:sequential [:or keyword? string? sequential?]])
+  (validate-form `(:plexus.impl/result ~@args) schema/result-schema))
 
 (defn union [& args]
-  (ma/coerce result-op-schema `(:plexus.impl/union ~@args) nil {:registry u/registry}))
+  (ma/coerce schema/result-op-schema `(:plexus.impl/union ~@args) nil {:registry u/registry}))
 
 (defn intersection [& args]
-  (ma/coerce result-op-schema `(:plexus.impl/intersection ~@args) nil {:registry u/registry}))
+  (ma/coerce schema/result-op-schema `(:plexus.impl/intersection ~@args) nil {:registry u/registry}))
 
 (defn difference [& args]
-  (ma/coerce result-op-schema `(:plexus.impl/difference ~@args) nil {:registry u/registry}))
+  (ma/coerce schema/result-op-schema `(:plexus.impl/difference ~@args) nil {:registry u/registry}))
 
 (defn slice [& args]
-  (validate-form `(:plexus.impl/slice ~@args)
-                 [:map
-                  [:length number?]]))
+  (validate-form `(:plexus.impl/slice ~@args) [:map [:length number?]]))
 
 (defn iso-hull [& args]
-  (validate-form `(:plexus.impl/iso-hull ~@args)
-                 [:map
-                  [:n-segments :pos-int]]))
+  (validate-form `(:plexus.impl/iso-hull ~@args) schema/hull-schema))
 
 (defn import [& args]
-  (validate-form `(:plexus.impl/import ~@args)
-                 [:map
-                  [:stl string?]]))
+  (validate-form `(:plexus.impl/import ~@args) schema/import-schema))
 
 (defn show-coordinate-frame [& args]
-  (validate-form `(:plexus.impl/show-coordinate-frame ~@args)
-                 [:map
-                  [:radius {:optional true} number?]
-                  [:length {:optional true} number?]
-                  [:label {:optional true} string?]
-                  [:frame-offset {:optional true} [:tuple int? int? int?]]]))
+  (validate-form `(:plexus.impl/show-coordinate-frame ~@args) schema/show-coordinate-frames-schema))
+
+(defn pattern [& args]
+  (let [{:keys [from axis distances angles namespaces end-at :plexus.impl/list]} (impl/parse-args (list* :na args))]
+    (assert (or angles distances))
+    (apply segment
+           (sort-by #(= (first %) :plexus.impl/segment)
+                    (for [[angle distance namespace idx]
+                          (map vector
+                               (or angles (repeat 0))
+                               (or distances (repeat 0))
+                               (or namespaces (repeat nil))
+                               (range))]
+                      (if (and end-at (= end-at idx))
+                        (segment
+                         (rotate axis angle)
+                         (translate axis distance)
+                         (add-ns :namespace namespace)
+                         (segment list))
+                        (branch
+                         :from from
+                         (rotate axis angle)
+                         (translate axis distance)
+                         (add-ns :namespace namespace)
+                         (segment list))))))))
 
 (defn subtract [a & args]
   (let [all-modules (reduce (fn [ret arg]
@@ -308,30 +236,6 @@
     (with-meta
       (conj (vec (vals all-modules)) result)
       (assoc (meta a) :modules all-modules :result result))))
-
-(defn pattern [& args]
-  (let [{:keys [from axis distances angles namespaces end-at :plexus.impl/list]} (impl/parse-args (list* :na args))]
-    (assert (or angles distances))
-    (apply segment
-           (sort-by #(= (first %) :plexus.impl/segment)
-                    (for [[angle distance namespace idx]
-                          (map vector
-                               (or angles (repeat 0))
-                               (or distances (repeat 0))
-                               (or namespaces (repeat nil))
-                               (range))]
-                      (if (and end-at (= end-at idx))
-                        (segment
-                         (rotate axis angle)
-                         (translate axis distance)
-                         (add-ns :namespace namespace)
-                         (segment list))
-                        (branch
-                         :from from
-                         (rotate axis angle)
-                         (translate axis distance)
-                         (add-ns :namespace namespace)
-                         (segment list))))))))
 
 (defn extrude [& extrude-forms]
   (impl/extrude extrude-forms))
