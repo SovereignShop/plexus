@@ -141,7 +141,7 @@ Branches work as you'd expect:
 ![Branching Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
 
 
-The frame of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
+        The body of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
 
 ## Gaps
 
@@ -162,7 +162,6 @@ You can make any segment a gap with the gap parameter:
      (spit "test.scad"))
 
 ```
-
 
 ![Gap Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/gap-example.png)
 
@@ -230,8 +229,56 @@ This produces equivalent output to above. Notice the nested pipes-path inherits 
 
 ![Points Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/points-example.png)
 
+# Important Notes
+
+## Enable Manifold CSG algorithm in OpenSCAD
+
+Until Plexus supports Manifold directly, it is important to enable Manifold as the CSG engine in OpenSCAD. Manifold DRAMATICALLY improves on the default CSG engine in OpenSCAD, often reducing rendering time by 1000x
+or more. It's is the algorithm that provides the strongest correctness guarantees. In the future, Plexus will use Manifold directly and will not depend on OpenSCAD.
+
+## Recipe for using Plexus with Emacs
+
+You can do something like this to 
+
+``` emacs-lisp
+
+;; List of SCAD libraries to include. Make sure $OPENSCADPATH is set correctly.
+(setq scad-libraries (list "scad-lib-FDMscrews/lib-FDMscrews.scad"))
+  
+(defun format-scad-libs (libs)
+ (funcall (-applify #'concat)
+          (-map (lambda (x) (concat"(scad-clj.model/use \"" x "\")\n")) libs)))
+ 
+(defun cider-eval-scad-render-at-point ()
+  (interactive)
+  (cider-interactive-eval
+   (format "
+et [arg %s
+    arg (if (var? arg) (deref arg) arg)
+    arg (if (vector? arg)
+          (conj (pop arg) (scad-clj.model/render (peek arg)))
+          (scad-clj.model/render arg))]
+(->> arg
+  (scad-clj.scad/write-scad %s)
+  (spit \"test.scad\")))"
+           (apply #'buffer-substring (cider-last-sexp 'bounds))
+           (format-scad-libs scad-libraries))
+   nil
+   nil
+   (cider--nrepl-pr-request-map)))
+
+
+```
+
+This way you can render an extrusion with just a keystroke. Assuming your using DOOM emacs, you can setup keybindings like so:
+
+``` emacs-lisp
+(map! (:map cider-mode-map
+       :n "SPC m e S" #'cider-eval-scad-render-at-point))
+```
+
 
 # Extensions
 
-Path segments are handled by a multi-method called `path-form` in the core namespace. You can easily extend it with your own custom segments. You simply have to ensure that the position and orientation are updated to correspond to the end of your shape, where the next segment should continue. See the
+Path segments are handled by a multi-method called `path-form` in the `pleuxs.impl` namespace. You can easily extend it with your own custom segments. You simply have to ensure that the position and orientation are updated to correspond to the end of your shape, where the next segment should continue. See the
 core namespace for examples.
