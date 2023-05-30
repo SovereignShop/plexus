@@ -105,5 +105,4 @@
    [:frame-offset {:optional true} [:tuple int? int? int?]]])
 
 (defn validate-form [form schema]
-  (and (impl/parse-args form schema)
-       form))
+  (impl/parse-args form schema))

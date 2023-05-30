@@ -94,7 +94,7 @@
   (validate-form `(:plexus.impl/hull ~@opts) schema/any-map-schema))
 
 (defn model [& args]
-  (validate-form `(:plexus.impl/model ~@args) model-schema))
+  (validate-form `(:plexus.impl/model ~@args) schema/model-schema))
 
 (defn translate [& args]
   (validate-form `(:plexus.impl/translate ~@args) schema/translate-schema))
@@ -107,11 +107,11 @@
 
 (defn spin [& args]
   (validate-form `(:plexus.impl/spin ~@args)
-                 any-map-schema))
+                 schema/any-map-schema))
 
 (defn set [& args]
   (validate-form `(:plexus.impl/set ~@args)
-                 any-map-schema))
+                 schema/any-map-schema))
 
 (defn branch [& args]
   (validate-form `(:plexus.impl/branch ~@args) schema/branch-schema))
@@ -130,7 +130,7 @@
   (validate-form `(:plexus.impl/model ~@(conj (vec args) :mask? true)) schema/model-schema))
 
 (defn frame [& args]
-  (validate-form `(:plexus.impl/model ~@(concat args [:mask? false])) schema/frame-schema))
+  (validate-form `(:plexus.impl/frame ~@args) schema/frame-schema))
 
 (defn save-transform [& args]
   (validate-form `(:plexus.impl/save-transform ~@args) schema/save-transform-schema))
@@ -144,7 +144,7 @@
 (defn add-ns [& args]
   (validate-form `(:plexus.impl/add-ns ~@args) schema/add-ns-schema))
 
-(defn forward-until [& args]
+#_(defn forward-until [& args]
   (validate-form `(:plexus.impl/forward-until ~@args) schema/any-map-schema))
 
 (defn ignore [& args]
@@ -198,7 +198,7 @@
                          (add-ns :namespace namespace)
                          (segment list))))))))
 
-(defn subtract [a & args]
+#_(defn subtract [a & args]
   (let [all-modules (reduce (fn [ret arg]
                               (if (impl/path? arg)
                                 (merge ret (-> arg meta :modules))
@@ -211,7 +211,7 @@
       (conj (vec (vals all-modules)) result)
       (assoc (meta a) :modules all-modules :result result))))
 
-(defn intersect [a & args]
+#_(defn intersect [a & args]
   (let [all-modules (reduce (fn [ret arg]
                               (if (impl/path? arg)
                                 (merge ret (-> arg meta :modules))
@@ -224,7 +224,7 @@
       (conj (vec (vals all-modules)) result)
       (assoc (meta a) :modules all-modules :result result))))
 
-(defn join [a & args]
+#_(defn join [a & args]
   (let [all-modules (reduce (fn [ret arg]
                               (if (impl/path? arg)
                                 (merge ret (-> arg meta :modules))
@@ -237,10 +237,10 @@
       (conj (vec (vals all-modules)) result)
       (assoc (meta a) :modules all-modules :result result))))
 
-(defn extrude [& extrude-forms]
+#_(defn extrude [& extrude-forms]
   (impl/extrude extrude-forms))
 
-(defmacro points
+#_(defmacro points
   [& forms]
   (let [[opts extrude*] (impl/parse-path forms)
         axes (or (:axes opts) [:x :y])
@@ -258,7 +258,7 @@
                                 (vector ~@clauses)) ~meta-props)
          m#))))
 
-(defmacro defmodel [name & extrude*]
+#_(defmacro defmodel [name & extrude*]
   (let [[opts extrude*] (impl/parse-path extrude*)]
     `(binding [m/*fn* ~(get opts :fn 10)]
        (def ~name
@@ -267,11 +267,153 @@
                                :namespace ~(str *ns* "." name))
                         ~extrude*)))))
 
-(defn lookup-transform
+#_(defn lookup-transform
   [model name]
   (or (-> model meta :segment-groups name peek meta :end-transform)
       (-> model meta :transforms name)))
 
-(defn lookup-property
+#_(defn lookup-property
   [model name property]
   (-> model meta :segment-groups name peek meta property))
+
+(def)
+
+(defpath
+  (def a (frame :cross-section (man/circle 10))))
+
+(def ^:dynamic a 30)
+
+(set! a 40)
+(var )
+
+(comment
+
+  (require '[plexus.impl2 :as impl2]
+           '[clj-manifold3d.core :as man])
+
+  ;; (1) accumulate defs.
+  (defpath
+    (def bolt-mask (frame :cross-section (man/circle 10)))
+    (def b (frame :cross-section (man/circle 9)))
+
+    (forward :length 20)
+
+    (branch
+     :from a
+     (rotate :y (/ Math/PI 2))
+     (forward :z 20))
+
+    (branch
+     :from a
+     :with []
+     (def c (difference a b))
+     (rotate :y (- (/ Math/PI 2)))
+     (forward :z 30))
+
+    (def d (union c (difference a b))))
+
+
+  (union a b c)
+
+  ;; Accumulate the defs, turn them into (frame ...) forms, then just put the defs at the end that grab from results.
+  (in-ns `plexus.impl)
+
+  (ns plexus.core)
+
+  (require '[plexus.wtf :as wtf])
+
+  wtf/a
+
+  plexus.wtf/a
+  (def a 65)
+
+  (plexus.impl/a 65)
+
+  (defpath
+    (ns )
+    (def body (circle 20))
+    (def mask (circle 18))
+
+    (forward :length 20)
+    (branch
+     :from body
+     (left :angle (/ Math/PI 2) :curve-radius 15)
+     (forward :length 20))
+    (branch
+     :from body
+     (right :angle (- (/ Math/PI 2)) :curve-radius 15)
+     (forward :length 20)
+     (def other-body (square 10 10 true))
+     (forward :z 50 :to [other-body])))
+
+  (def result (difference body mask))
+
+
+  (def  50)
+
+  (def result (difference a b c))
+
+
+  (defmacro tmp
+    [def-form]
+    (let [sym (second def-form)]
+      `(let [~sym 20]
+
+         (def ~sym ~sym))))
+
+  (tmp (def a 30))
+
+  (-> (time (:c (impl2/extrude
+                 (result :name :c :expr (difference :a :b))
+                 (frame :name :a :cross-section (man/circle 10))
+                 (frame :name :b :cross-section (man/circle 9))
+                 (forward :length 20)
+                 #_(right :angle (/ Math/PI 2) :curve-radius 20)
+                 (left :angle (/ Math/PI 2) :curve-radius 20)
+                 (right :angle (/ Math/PI 2) :curve-radius 20)
+                 (forward :length 20))))
+      (man/get-mesh)
+      (man/export-mesh "test.stl"))
+
+  (-> (:c (impl2/extrude
+           (def a (extrusion :cross-section (man/circle 3)))
+           (def b (extrusion :cross-section (man/circle 2)))
+           (forward :length 10)
+           (left :angle pi|2 :curve-radius 4)
+           (forward :length 30)
+           (left :angle pi|2 :curve-radius 4)
+           (branch
+            :from a
+            :with []
+            (def a (frame :cross-section (man/circle 10)))
+            (def c (frame :cross-section (man/square 20 20)))
+
+            (rotate :y (- (/ Math/PI 2)))
+            (forward :length 20)
+            (translate :z 20 :to [a b c])
+            (forward :length 5))
+           (translate :z 10 :y 30 :x 15)
+           (rotate :x (/ Math/PI 6))
+           (translate :z -0.1 :to [:b])
+           (forward :length 20)
+           (forward :length 0.2 :to [:b])
+
+           (def d (difference a b c))
+           (def e ()))
+          (def result))
+      (man/get-mesh)
+      (man/export-mesh "test.stl"))
+
+  (forward :length 20 :to [:a :b :c])
+  (forward :length 200 :to [:x :y :z])
+
+  (forward :z 400 :to [:body :mask])
+
+  (forward :z 500 :to [:body :mask])
+  (forward :z 650 :to [:body :mask])
+  (branch
+   :from :body
+   :with []
+   (forward :z 20))
+
+  )

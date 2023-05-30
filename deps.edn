@@ -1,5 +1,7 @@
 {:paths ["src/main" "resources"]
- :deps  {net.mikera/core.matrix {:mvn/version "0.62.0"}
+ :deps  {org.clojure/clojure {:mvn/version "1.11.0"}
+         net.mikera/core.matrix {:mvn/version "0.62.0"}
+         org.clojars.cartesiantheatrics/clj-manifold3d {:mvn/version "0.0.6"}
          camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
          metosin/malli {:mvn/version "0.11.0"}
