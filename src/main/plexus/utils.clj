@@ -41,7 +41,7 @@
    (apply + (mat/mul (mat/sub a b)
                      (mat/sub a b)))))
 
-(defn ->inverse-scad-transform
+#_(defn ->inverse-scad-transform
   ([m] (->inverse-scad-transform tf/identity-tf m))
   ([m1 m2]
    (let [translation (mat/sub (tf/translation-vector m2) (tf/translation-vector m1))

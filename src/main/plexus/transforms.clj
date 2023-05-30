@@ -47,7 +47,7 @@
 (defn get-roll
   [tf]
   (let [rm (:dir tf)
-        [angle _] (rotation-axis-and-angle [1 0 0] (nth rm 0) [0 0 1](assoc :manifold (.transform manifold (MatrixTransforms/InvertTransform m))))]
+        [angle _] (rotation-axis-and-angle [1 0 0] (nth rm 0) [0 0 1])]
     angle))
 
 (defn rotate [m axis a]

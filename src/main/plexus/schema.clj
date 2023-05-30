@@ -87,7 +87,7 @@
 (def result-schema
   [:map
    [:name [:or keyword? string?]]
-   [:expr [:or keyword? [:sequential any?]]]])
+   [:expr any? #_[:or keyword? [:sequential any?]]]])
 
 (def hull-schema
   [:map
