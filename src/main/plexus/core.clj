@@ -198,84 +198,13 @@
                          (add-ns :namespace namespace)
                          (segment list))))))))
 
+(defn extrude [& forms]
+  (impl/extrude forms))
+
 (comment
 
 
-  ;; (1) accumulate defs.
-  (defpath
-    (def bolt-mask (frame :cross-section (m/circle 10)))
-    (def b (frame :cross-section (m/circle 9)))
-
-    (forward :length 20)
-
-    (branch
-     :from a
-     (rotate :y (/ Math/PI 2))
-     (forward :z 20))
-
-    (branch
-     :from a
-     :with []
-     (def c (difference a b))
-     (rotate :y (- (/ Math/PI 2)))
-     (forward :z 30))
-
-    (def d (union c (difference a b))))
-
-
-  (union a b c)
-
-  ;; Accumulate the defs, turn them into (frame ...) forms, then just put the defs at the end that grab from results.
-  (in-ns `plexus.impl)
-
-  (ns plexus.core)
-
-  (require '[plexus.wtf :as wtf])
-
-  wtf/a
-
-  plexus.wtf/a
-  (def a 65)
-
-  (plexus.impl/a 65)
-
-  (defpath
-    (ns )
-    (def body (circle 20))
-    (def mask (circle 18))
-
-    (forward :length 20)
-    (branch
-     :from body
-     (left :angle (/ Math/PI 2) :curve-radius 15)
-     (forward :length 20))
-    (branch
-     :from body
-     (right :angle (- (/ Math/PI 2)) :curve-radius 15)
-     (forward :length 20)
-     (def other-body (square 10 10 true))
-     (forward :z 50 :to [other-body])))
-
-  (def result (difference body mask))
-
-
-  (def  50)
-
-  (def result (difference a b c))
-
-
-  (defmacro tmp
-    [def-form]
-    (let [sym (second def-form)]
-      `(let [~sym 20]
-
-         (def ~sym ~sym))))
-
-  (subvec [1 2 3] 2)
-
-  (tmp (def a 30))
-
-  (time (-> (:c (impl/extrude
+  (time (-> (:c (extrude
                  (result :name :c
                          :expr (->> (difference (union :a :d) :b)
                                     (translate :x 30 :y 70)))
@@ -295,51 +224,5 @@
                     (up :angle (/ Math/PI 1) :curve-radius 20)])))
             (m/get-mesh)
             (m/export-mesh "test.glb")))
-
-  (-> (:c (impl/extrude
-           (def a (extrusion :cross-section (m/circle 3)))
-           (def b (extrusion :cross-section (m/circle 2)))
-           (forward :length 10)
-           (left :angle pi|2 :curve-radius 4)
-           (forward :length 30)
-           (left :angle pi|2 :curve-radius 4)
-           (branch
-            :from a
-            :with []
-            (def a (frame :cross-section (m/circle 10)))
-            (def c (frame :cross-section (m/square 20 20)))
-
-            (rotate :y (- (/ Math/PI 2)))
-            (forward :length 20)
-            (translate :z 20 :to [a b c])
-            (forward :length 5))
-           (translate :z 10 :y 30 :x 15)
-           (rotate :x (/ Math/PI 6))
-           (translate :z -0.1 :to [:b])
-           (forward :length 20)
-           (forward :length 0.2 :to [:b])
-
-           (def d (difference a b c))
-           (def e ()))
-          (def result))
-      (m/get-mesh)
-      (m/export-mesh "test.stl"))
-
-  (-> (u/iso-hull [[[-10 0 0] [10 0 0] [0 10 0]]
-                   [[-10 0 20] [50 0 20] [0 20 20]]])
-      (m/get-mesh)
-      (m/export-mesh "test.stl"))
-
-  (forward :length 20 :to [:a :b :c])
-  (forward :length 200 :to [:x :y :z])
-
-  (forward :z 400 :to [:body :mask])
-
-  (forward :z 500 :to [:body :mask])
-  (forward :z 650 :to [:body :mask])
-  (branch
-   :from :body
-   :with []
-   (forward :z 20))
 
   )

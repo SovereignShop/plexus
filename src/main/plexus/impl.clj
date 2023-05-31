@@ -235,7 +235,7 @@
          :plexus.impl/result
          (recur state forms frames (conj result-forms form)))))))
 
-(defn extrude [& forms]
+(defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
         frames (:frames result)
         result-forms (:result-forms result)
