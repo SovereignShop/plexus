@@ -2,11 +2,10 @@
   (:refer-clojure :exclude [set])
   (:require
    [plexus.utils :as u]
-   [plexus.impl :as impl]
    [plexus.schema :as schema :refer [validate-form]]
    [clj-manifold3d.core :as m]
    [malli.core :as ma]
-   [plexus.impl2 :as impl2]))
+   [plexus.impl :as impl]))
 
 (defn extrude-to
   [& opts]
@@ -276,27 +275,28 @@
 
   (tmp (def a 30))
 
-  (-> (time (:c (impl2/extrude
-                 (result :name :c :expr (->> (difference :a :b)
-                                             (translate :x 30 :y 70)))
+  (time (-> (:c (impl/extrude
+                 (result :name :c
+                         :expr (->> (difference (union :a :d) :b)
+                                    (translate :x 30 :y 70)))
+
                  (frame :name :a :cross-section (m/square 10 15 true))
                  (frame :name :b :cross-section (m/square 8 13 true))
-                 (forward :length 20)
-                 (hull
-                  :to [:a :b]
-                  (left :angle Math/PI :curve-radius 20)
-                  (forward :length 20))
-                 (right :angle Math/PI :curve-radius 20)
-                 (forward :length 20)
-                 (down :angle Math/PI :curve-radius 20)
-                 (forward :length 20)
-                 (left :angle (/ Math/PI 1) :curve-radius 20)
-                 (forward :length 20)
-                 (up :angle Math/PI :curve-radius 20))))
-      (m/get-mesh)
-      (m/export-mesh "test.stl"))
 
-  (-> (:c (impl2/extrude
+                 (forward :length 20)
+                 (left :angle Math/PI :curve-radius 20)
+                 (forward :length 20)
+                 (right :angle Math/PI :curve-radius 20)
+                 (frame :name :d :cross-section (m/circle 25))
+                 (for [_ (range 4)]
+                   [(forward :length 20)
+                    (down :angle (/ Math/PI 1) :curve-radius 20)
+                    (forward :length 20)
+                    (up :angle (/ Math/PI 1) :curve-radius 20)])))
+            (m/get-mesh)
+            (m/export-mesh "test.glb")))
+
+  (-> (:c (impl/extrude
            (def a (extrusion :cross-section (m/circle 3)))
            (def b (extrusion :cross-section (m/circle 2)))
            (forward :length 10)
@@ -322,6 +322,11 @@
            (def d (difference a b c))
            (def e ()))
           (def result))
+      (m/get-mesh)
+      (m/export-mesh "test.stl"))
+
+  (-> (u/iso-hull [[[-10 0 0] [10 0 0] [0 10 0]]
+                   [[-10 0 20] [50 0 20] [0 20 20]]])
       (m/get-mesh)
       (m/export-mesh "test.stl"))
 
