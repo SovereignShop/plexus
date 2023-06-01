@@ -57,7 +57,7 @@ transforming both profiles with each segment:
      (spit "test.scad"))
 ```
 
-![Pipe Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/pipe-example.png)
+![Pipe Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/pipe-example.png)
 
 
 This is equivalent to the one above, but we can still see there is a lot of duplication. The `:to [:outer :inner]` is repeated in each segment.
@@ -115,7 +115,7 @@ are applied in a stack-like fashion to the previous two profiles:
      (spit "test.scad"))
 ```
 
-![Hull Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/hull-example.png)
+![Hull Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/hull-example.png)
 
 i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack. You can specify the parameter `n-segments` if you'd like to hull between several segments.
 
@@ -138,7 +138,7 @@ Branches work as you'd expect:
      (spit "test.scad"))
 ```
 
-![Branching Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/branching-example.png)
+![Branching Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/branching-example.png)
 
 
         The body of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
@@ -163,7 +163,7 @@ You can make any segment a gap with the gap parameter:
 
 ```
 
-![Gap Example](https://github.com/SovereignShop/scad-paths/blob/main/resources/images/gap-example.png)
+![Gap Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/gap-example.png)
 
 ## Segments
 
