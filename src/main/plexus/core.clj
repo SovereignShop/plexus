@@ -198,44 +198,11 @@
 (defn extrude [& forms]
   (impl/extrude forms))
 
-(defn subtract [a & args]
-  #_(let [all-modules (reduce (fn [ret arg]
-                              (if (impl/path? arg)
-                                (merge ret (-> arg meta :modules))
-                                (merge ret (-> arg second meta :modules))))
-                            {}
-                            (cons a args))
-        all-results (impl/get-models (cons a args))
-        result (apply m/difference all-results)]
-    (with-meta
-      (conj (vec (vals all-modules)) result)
-      (assoc (meta a) :modules all-modules :result result))))
+(defn subtract [a & args])
 
-(defn intersect [a & args]
-  #_(let [all-modules (reduce (fn [ret arg]
-                              (if (impl/path? arg)
-                                (merge ret (-> arg meta :modules))
-                                (merge ret (-> arg second meta :modules))))
-                            {}
-                            (cons a args))
-        all-results (impl/get-models (cons a args))
-        result (apply m/intersection all-results)]
-    (with-meta
-      (conj (vec (vals all-modules)) result)
-      (assoc (meta a) :modules all-modules :result result))))
+(defn intersect [a & args])
 
-(defn join [a & args]
-  #_(let [all-modules (reduce (fn [ret arg]
-                              (if (impl/path? arg)
-                                (merge ret (-> arg meta :modules))
-                                (merge ret (-> arg second meta :modules))))
-                            {}
-                            (cons a args))
-        all-results (impl/get-models (cons a args))
-        result (apply m/union all-results)]
-    (with-meta
-      (conj (vec (vals all-modules)) result)
-      (assoc (meta a) :modules all-modules :result result))))
+(defn join [a & args])
 
 (defmacro points
   [& forms]
@@ -266,25 +233,37 @@
       (m/get-mesh)
       (m/export-mesh "test.glb"))
 
+  (def triangle
+    (m/cross-section [[-10 0] [10 0] [0 10]]))
 
   (-> (time (-> (:c (:frames (extrude
                               (result :name :c
-                                      :expr (->> (difference (union :a :d) :b)
-                                                 (translate :x 30 :y 70)))
+                                      :expr (->> (difference :a :b)
+                                                 #_(translate :x 30 :y 70)))
 
-                              (frame :name :a :cross-section (m/square 10 15 true))
-                              (frame :name :b :cross-section (m/square 8 13 true))
+                              (frame :name :a :cross-section triangle)
+                              (frame :name :b :cross-section (m/offset triangle -1))
 
-                              (forward :length 20)
+                              #_(up :angle (/ Math/PI 2) :curve-radius 20)
+                              #_(down :angle (/ Math/PI 2) :curve-radius 20)
+                              #_(left :angle (/ Math/PI 2) :curve-radius 20)
+                              (up :angle (/ Math/PI 2) :curve-radius 20)
+                              #_(forward :length 20)
                               (left :angle Math/PI :curve-radius 20)
                               (forward :length 20)
                               (right :angle Math/PI :curve-radius 20)
-                              (frame :name :d :cross-section (m/circle 25))
-                              (for [_ (range 12)]
-                                [(forward :length 20)
-                                 (down :angle (/ Math/PI 1) :curve-radius 20)
-                                 (forward :length 20)
-                                 (up :angle (/ Math/PI 1) :curve-radius 20)]))))
+                              (up :angle Math/PI :curve-radius 20)
+                              (forward :length 20)
+                              (left :angle Math/PI :curve-radius 20)
+                              (forward :length 20)
+                              (up :angle Math/PI :curve-radius 20)
+                              (forward :length 40)
+                              #_(frame :name :d :cross-section (m/circle 25))
+                              #_(for [_ (range 1)]
+                                  [(forward :length 20)
+                                   (down :angle (/ Math/PI 1) :curve-radius 20)
+                                   (forward :length 20)
+                                   (up :angle (/ Math/PI 1) :curve-radius 20)]))))
                 (m/get-mesh)))
       (m/export-mesh "test.glb"))
 

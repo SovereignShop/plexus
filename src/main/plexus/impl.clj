@@ -179,8 +179,10 @@
                                                  :manifold
                                                  (when-let [cross-section (and (not gap) (:cross-section frame))]
                                                    (-> cross-section
+                                                       (m/rotate 180)
                                                        (cond-> (= op :plexus.impl/up) (m/rotate -90)
-                                                               (= op :plexus.impl/down) (m/rotate 90))
+                                                               (= op :plexus.impl/down) (m/rotate 90)
+                                                               (= op :plexus.impl/right) (m/rotate 180))
                                                        (m/translate [curve-radius 0])
                                                        (m/revolve 20 (* angle 57.29578))
                                                        (m/translate [(- curve-radius) 0 0])
