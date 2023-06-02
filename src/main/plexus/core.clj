@@ -258,13 +258,25 @@
                               (forward :length 20)
                               (up :angle Math/PI :curve-radius 20)
                               (forward :length 40)
-                              #_(frame :name :d :cross-section (m/circle 25))
-                              #_(for [_ (range 1)]
-                                  [(forward :length 20)
-                                   (down :angle (/ Math/PI 1) :curve-radius 20)
-                                   (forward :length 20)
-                                   (up :angle (/ Math/PI 1) :curve-radius 20)]))))
+                              (for [_ (range 3)]
+                                [(forward :length 20)
+                                 (down :angle (/ Math/PI 1) :curve-radius 4)
+                                 (forward :length 20)
+                                 (up :angle (/ Math/PI 1) :curve-radius 20)]))))
                 (m/get-mesh)))
       (m/export-mesh "test.glb"))
 
+
+  (ns-extrusion
+   (def tmp-body (frame :name :a
+                        :cross-section (m/circle 20)
+                        :curve-radius 20))
+
+   (def tmp-mask (frame :name :b
+                        :cross-seciton (m/cricle 30)
+                        :curve-radius 30))
+   (forward :length 20)
+   (left :angle (/ Math/PI 2)))
+
+  (def tmp-ret (m/diference tmp-body tmp-mask))
   )

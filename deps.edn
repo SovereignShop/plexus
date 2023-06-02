@@ -2,7 +2,7 @@
  :deps  {org.clojure/clojure {:mvn/version "1.11.0"}
          net.mikera/core.matrix {:mvn/version "0.62.0"}
          org.clojars.cartesiantheatrics/manifold3d {:local/root "../manifold/bindings/java/target/manifold3d-1.0.3.jar"}
-         org.clojars.cartesiantheatrics/clj-manifold3d {:local/root "../clj-manifold3d/target/clj-manifold3d-0.0.6.jar"}
+         org.clojars.cartesiantheatrics/clj-manifold3d {:local/root "../clj-manifold3d/"}
          camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
          metosin/malli {:mvn/version "0.11.0"}

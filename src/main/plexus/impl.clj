@@ -81,8 +81,13 @@
 
          :plexus.impl/frame
          (let [frame-id (:name form)
+
                default-frame-id (:default-frame state)
-               frame (merge (default-frame-id frames) (select-keys form [:name :cross-section]))]
+               frame (merge (if (contains? frames frame-id)
+                              (get frames frame-id)
+                              (assoc (default-frame-id frames) :segments []))
+                            (select-keys form [:name :cross-section]))
+               tv (tf/translation-vector (:end-transform frame))]
            (recur (-> state
                       (assoc :default-frame frame-id)
                       (update :current-frame-ids conj frame-id))
@@ -111,7 +116,8 @@
                                                          end-transform)
                                     frame (merge frame props)]
                                 (-> frame
-                                    (assoc :end-transform end-transform)
+                                    (assoc :end-transform end-transform
+                                           :start-transform start-transform)
                                     (update :segments
                                             conj
                                             (assoc frame
@@ -155,21 +161,24 @@
                                              (f (sign r))
                                              (tf/go-forward d)
                                              (f (sign (- angle r))))
-                           all-tfs (all-transforms start-transform
-                                                   (fn [tf r d a]
-                                                     (-> tf
-                                                         (f (sign r))
-                                                         (tf/go-forward d)
-                                                         (f (sign (- a r)))))
-                                                   curve-radius
-                                                   angle
-                                                   20
-                                                   transform-step-fn)
+                           all-tfs (if gap
+                                     []
+                                     (all-transforms start-transform
+                                                     (fn [tf r d a]
+                                                       (-> tf
+                                                           (f (sign r))
+                                                           (tf/go-forward d)
+                                                           (f (sign (- a r)))))
+                                                     curve-radius
+                                                     angle
+                                                     20
+                                                     transform-step-fn))
                            frame (merge frame props)]
                        (assoc frames
                               frame-id
                               (-> frame
-                                  (assoc :end-transform end-transform)
+                                  (assoc :end-transform end-transform
+                                         :start-transform start-transform)
                                   (update :segments
                                           conj
                                           (assoc frame
@@ -266,7 +275,7 @@
          (let [{:keys [from with]} form
                with-frames (or with current-frame-ids)
                ret (extrude* (assoc state :default-frame from :current-frame-ids with-frames)
-                             (:plexus.impl/list form)
+                             (normalize-segment (:plexus.impl/list form))
                              frames)]
            (recur state
                   forms
@@ -296,8 +305,9 @@
                                             (when (pos? (count manifolds))
                                               [frame-id (apply m/union manifolds)]))))
                                    (remove nil?))
-                             (dissoc frames ::default-frame))]
-    (update result
+                             (dissoc frames ::default-frame))
+        main-frame-name (:name (first result-forms))]
+    (update (assoc result :main-frame main-frame-name)
             :frames
             merge
             (reduce (fn [result-frames result-form]
@@ -311,15 +321,14 @@
                                       (case (:op expr)
                                         :plexus.impl/translate (m/translate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])
                                         :plexus.impl/rotate (m/rotate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])))
-                                    (apply
-                                     (case (first expr)
+                                    ((case (first expr)
                                        :plexus.impl/difference m/difference
                                        :plexus.impl/union m/union
                                        :plexus.impl/intersection m/intersection)
                                      (map eval-result (next expr))))))
                               (:expr result-form))))
                     unioned-frames
-                    result-forms))))
+                    (rseq result-forms)))))
 
 (defn path-points
   ([extrusion]
