@@ -1,4 +1,5 @@
 (ns plexus.impl
+  (:import [manifold3d.glm MatrixTransforms DoubleVec3])
   (:require
    [plexus.utils :as u]
    [malli.core :as ma]
@@ -46,6 +47,9 @@
           segment)
     [segment]))
 
+(defn ->keyword [namespace name*]
+  (keyword (name namespace) (name name*)))
+
 (defn all-transforms [start-transform tf-fn curve-radius angle steps step-fn]
   (let [step-angle (/ angle steps)]
     (map-indexed (fn [i tf]
@@ -62,13 +66,14 @@
   ([forms]
    (extrude* {:current-frame-ids #{}
               :default-frame ::default-frame
-              :forms forms}
+              :forms forms
+              :angle-scalar 57.29578}
              forms
              {::default-frame {:start-transform (tf/transform)
                                :end-transform (tf/transform)
                                :segments []}}))
   ([state forms frames]
-   (loop [{:keys [current-frame-ids] :as state} state
+   (loop [{:keys [current-frame-ids angle-scalar] :as state} state
           [form & forms] forms
           frames frames
           result-forms []]
@@ -76,7 +81,9 @@
        {:result-forms result-forms
         :frames frames
         :state state
-        :forms (:forms state)}
+        :angle-scalar angle-scalar
+        :forms (:forms state)
+        :transforms (:transforms state)}
        (case (:op form)
 
          :plexus.impl/frame
@@ -143,6 +150,84 @@
                    apply-to)
                   result-forms))
 
+         :plexus.impl/offset
+         (let [{:keys [delta to join-type simplify]
+                :or {join-type :square}} form
+               apply-to (or to current-frame-ids)]
+           (recur state
+                  forms
+                  (reduce
+                   (fn [frames frame-id]
+                     (let [frame (get frames frame-id)]
+                       (assoc frames
+                              frame-id
+                              (cond-> frame
+                                true (update :cross-section m/offset delta join-type)
+                                simplify (update :cross-section m/simplify simplify)))))
+                   frames
+                   apply-to)
+                  result-forms))
+
+         :plexus.impl/iso-hull
+         (let [{:keys [to]} form
+               hull-forms (normalize-segment (:plexus.impl/list form))
+               hull-frames (or to current-frame-ids)
+               ret (extrude* state hull-forms frames)]
+           (recur (:state ret)
+                  forms
+                  (reduce
+                   (fn [ret-frames frame-id]
+                     (let [before-frame (get frames frame-id)
+                           ret-frame (get ret-frames frame-id)]
+                       (assoc ret-frames
+                              frame-id
+                              (update ret-frame
+                                      :segments
+                                      (fn [segments]
+                                        (let [n-segments-before-hull (count (:segments before-frame))
+                                              hull-segments (subvec segments n-segments-before-hull)
+                                              prev-segments (subvec segments 0 n-segments-before-hull)]
+                                          (conj prev-segments
+                                                {:start-transform (:start-transform (first hull-segments))
+                                                 :end-transform (:end-transform (peek hull-segments))
+                                                 :manifold (apply m/hull (map :manifold (remove nil? hull-segments)))})))))))
+                   (:frames ret)
+                   hull-frames)
+                  (into result-forms (:result-forms ret))))
+
+         :plexus.impl/loft
+         (let [{:keys [to]} form
+               loft-forms (normalize-segment (:plexus.impl/list form))
+               loft-frames (or to current-frame-ids)
+               ret (extrude* state loft-forms frames)]
+           (recur (:state ret)
+                  forms
+                  (reduce
+                   (fn [ret-frames frame-id]
+                     (let [before-frame (get frames frame-id)
+                           ret-frame (get ret-frames frame-id)]
+                       (assoc ret-frames
+                              frame-id
+                              (update ret-frame
+                                      :segments
+                                      (fn [segments]
+                                        (let [n-segments-before-loft (count (:segments before-frame))
+                                              loft-segments (subvec segments n-segments-before-loft)
+                                              prev-segments (subvec segments 0 n-segments-before-loft)]
+                                          (conj prev-segments
+                                                {:start-transform (:start-transform (first loft-segments))
+                                                 :end-transform (:end-transform (peek loft-segments))
+                                                 :manifold (m/loft (mapcat
+                                                                    (fn [{:keys [cross-section all-transforms]}]
+                                                                      (for [tf all-transforms]
+                                                                        {:cross-section cross-section
+                                                                         :frame tf}))
+                                                                    (remove nil? loft-segments)))})))))))
+                   (:frames ret)
+                   loft-frames)
+                  (into result-forms (:result-forms form))))
+
+
          (:plexus.impl/left :plexus.impl/right :plexus.impl/up :plexus.impl/down)
          (let [{:keys [curve-radius angle to op transform-step-fn props gap]
                 :or {transform-step-fn (fn [tf angle] tf)}} form
@@ -193,9 +278,9 @@
                                                                (= op :plexus.impl/down) (m/rotate 90)
                                                                (= op :plexus.impl/right) (m/rotate 180))
                                                        (m/translate [curve-radius 0])
-                                                       (m/revolve 20 (* angle 57.29578))
+                                                       (m/revolve 20 (* angle angle-scalar))
                                                        (m/translate [(- curve-radius) 0 0])
-                                                       (m/rotate [(* 57.29578 (/ Math/PI 2)) 0 0])
+                                                       (m/rotate [90 0 0])
                                                        (m/rotate [0 0 (case op
                                                                         :plexus.impl/right 180
                                                                         :plexus.impl/up -90
@@ -207,7 +292,7 @@
                   result-forms))
 
          :plexus.impl/translate
-         (let [{:keys [x y z to]} form
+         (let [{:keys [x y z to global?]} form
                apply-to (or to current-frame-ids)]
            (recur state
                   forms
@@ -216,7 +301,11 @@
                      (let [frame (get frames frame-id)]
                        (assoc frames
                               frame-id
-                              (update frame :end-transform m/translate [(or x 0) (or y 0) (or z 0)]))))
+                              (if global?
+                                (update frame :end-transform #(MatrixTransforms/SetTranslation
+                                                               %1
+                                                               (DoubleVec3. (or x 0) (or y 0) (or z 0))))
+                                (update frame :end-transform m/translate [(or x 0) (or y 0) (or z 0)])))))
                    frames
                    apply-to)
                   result-forms))
@@ -232,7 +321,9 @@
                      (let [frame (get frames frame-id)]
                        (assoc frames
                               frame-id
-                              (update frame :end-transform m/rotate [(or x 0) (or y 0) (or z 0)]))))
+                              (update frame :end-transform m/rotate [(* 1 (or x 0))
+                                                                     (* 1 (or y 0))
+                                                                     (* 1 (or z 0))]))))
                    frames
                    apply-to)
                   result-forms))
@@ -274,39 +365,81 @@
          :plexus.impl/branch
          (let [{:keys [from with]} form
                with-frames (or with current-frame-ids)
-               ret (extrude* (assoc state :default-frame from :current-frame-ids with-frames)
-                             (normalize-segment (:plexus.impl/list form))
-                             frames)]
-           (recur state
+               branch-ret (extrude* (assoc state
+                                           :default-frame from
+                                           :current-frame-ids with-frames)
+                                    (normalize-segment (:plexus.impl/list form))
+                                    (select-keys frames (conj with-frames from)))]
+           (recur (-> state
+                      (update :transforms #(into (or % {}) (:transforms branch-ret))))
                   forms
                   (reduce-kv
                    (fn [ret frame-id branch-frame]
-                     (let [frame (get ret frame-id)]
-                       (if (contains? ret frame-id)
-                         (assoc ret
-                                frame-id
-                                (update frame :segments into (:segments branch-frame)))
-                         (assoc frames frame-id branch-frame))))
+                     (if (contains? ret frame-id)
+                       (assoc ret
+                              frame-id
+                              (update (get ret frame-id) :segments into (:segments branch-frame)))
+                       (assoc ret frame-id branch-frame)))
                    frames
-                   (:frames ret))
-                  (into result-forms (:result-forms ret))))
+                   (:frames branch-ret))
+                  (into result-forms (:result-forms branch-ret))))
 
 
          :plexus.impl/result
-         (recur state forms frames (conj result-forms form)))))))
+         (recur state forms frames (conj result-forms form))
+
+
+         :plexus.impl/add-ns
+         (let [{:keys [namespace to]} form
+               apply-to (or to current-frame-ids)]
+           (recur state
+                  forms
+                  (reduce
+                   (fn [frames frame-id]
+                     (let [frame (get frames frame-id)]
+                       (assoc frames
+                              frame-id
+                              (update frame
+                                      :namespace
+                                      #(keyword
+                                        (if %1
+                                          (str (name %1) "." (name namespace))
+                                          namespace))))))
+                   frames
+                   apply-to)
+                  result-forms))
+
+         :plexus.impl/save-transform
+         (let [{:keys [frame to name]} form
+               frame (get frames frame)
+               namespace (:namespace frame)
+               transform-name (cond->> name
+                                namespace (->keyword namespace))]
+           (recur (update state :transforms assoc transform-name (:end-transform frame))
+                  forms
+                  frames
+                  result-forms))
+
+
+         (throw (Exception. (str "No matching clause for form: " form))))))))
 
 (defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
         frames (:frames result)
+        angle-scalar (:angle-scalar result)
         result-forms (:result-forms result)
         unioned-frames (into {}
                              (comp (map (fn [[frame-id frame]]
                                           (let [manifolds (remove nil? (map :manifold (:segments frame)))]
                                             (when (pos? (count manifolds))
-                                              [frame-id (apply m/union manifolds)]))))
+                                              [frame-id (m/union manifolds)]))))
                                    (remove nil?))
                              (dissoc frames ::default-frame))
-        main-frame-name (:name (first result-forms))]
+        main-frame-name (:name (first result-forms))
+        flatten-expr (fn flatten-expr [expr]
+                       (if (and (sequential? expr) (sequential? (first expr)))
+                         (map flatten-expr expr)
+                         expr))]
     (update (assoc result :main-frame main-frame-name)
             :frames
             merge
@@ -315,20 +448,35 @@
                              (:name result-form)
                              ((fn eval-result [expr]
                                 (if (keyword? expr)
-                                  (get result-frames expr)
+                                  (if-let [frame_ (get result-frames expr)]
+                                    frame_
+                                    (throw (Exception. (str "Frame is not defined: " expr))))
                                   (if (map? expr)
-                                    (let [manifold (eval-result (first (:plexus.impl/list expr)))]
-                                      (case (:op expr)
-                                        :plexus.impl/translate (m/translate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])
-                                        :plexus.impl/rotate (m/rotate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])))
+                                    (if (= (:op expr) :plexus.impl/hull)
+                                      (m/hull (map eval-result (:plexus.impl/list expr)))
+                                      (let [manifold (eval-result (first (:plexus.impl/list expr)))]
+                                        (case (:op expr)
+                                          :plexus.impl/mirror (m/mirror manifold (:normal expr))
+                                          :plexus.impl/translate (m/translate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])
+                                          :plexus.impl/rotate (m/rotate manifold [(* angle-scalar (or (:x expr) 0))
+                                                                                  (* angle-scalar (or (:y expr) 0))
+                                                                                  (* angle-scalar (or (:z expr) 0))])
+                                          (throw (Exception. (str "Unkown expr: " expr))))))
                                     ((case (first expr)
                                        :plexus.impl/difference m/difference
                                        :plexus.impl/union m/union
-                                       :plexus.impl/intersection m/intersection)
-                                     (map eval-result (next expr))))))
+                                       :plexus.impl/intersection m/intersection
+                                       (throw (Exception. (str "Unknown expr: " (vec expr) " ( " (type expr) " )"))))
+                                     (map eval-result (if (and (sequential? (next expr))
+                                                               (sequential? (first (next expr)))
+                                                               (= (count (next expr)) 1))
+                                                        (second expr)
+                                                        (next expr)))))))
                               (:expr result-form))))
                     unioned-frames
                     (rseq result-forms)))))
+
+(str (type nil))
 
 (defn path-points
   ([extrusion]

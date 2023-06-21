@@ -1,6 +1,6 @@
 (ns plexus.transforms
   (:import
-   [manifold3d.glm MatrixTransforms DoubleMat4x3 DoubleVec3])
+   [manifold3d.glm MatrixTransforms DoubleMat4x3 DoubleVec3 DoubleVec3])
   (:require
    [clojure.core.matrix :as mat]))
 
@@ -51,7 +51,12 @@
     angle))
 
 (defn rotate [m axis a]
-  (MatrixTransforms/Rotate m axis a))
+  (MatrixTransforms/Rotate m
+                           (case axis
+                             :x (DoubleVec3. 1 0 0)
+                             :y (DoubleVec3. 0 1 0)
+                             :z (DoubleVec3. 0 0 1))
+                           a))
 
 (defn go-forward
   ([m x]

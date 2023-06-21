@@ -85,6 +85,10 @@
   [& opts]
   (validate-form `(:plexus.impl/backward ~@opts) schema/linear-extrude-schema))
 
+(defn loft
+  [& opts]
+  (validate-form `(:plexus.impl/loft ~@opts) schema/any-map-schema))
+
 (defn hull
   [& opts]
   (validate-form `(:plexus.impl/hull ~@opts) schema/any-map-schema))
@@ -94,6 +98,9 @@
 
 (defn translate [& args]
   (validate-form `(:plexus.impl/translate ~@args) schema/translate-schema))
+
+(defn mirror [& args]
+  (validate-form `(:plexus.impl/mirror ~@args) schema/mirror-schema))
 
 (defn rotate [& args]
   (validate-form `(:plexus.impl/rotate ~@args) schema/rotate-schema))
@@ -191,7 +198,8 @@
                          (add-ns :namespace namespace)
                          (segment list))))))))
 
-(defn lookup-transform [])
+(defn lookup-transform [extrusion key]
+  (-> extrusion :transforms key))
 
 (defn lookup-property [])
 
@@ -236,33 +244,33 @@
   (def triangle
     (m/cross-section [[-10 0] [10 0] [0 10]]))
 
+  (m/offset triangle -1)
+
   (-> (time (-> (:c (:frames (extrude
                               (result :name :c
-                                      :expr (->> (difference :a :b)
+                                      :expr (->> (difference :a #_:b)
                                                  #_(translate :x 30 :y 70)))
 
-                              (frame :name :a :cross-section triangle)
-                              (frame :name :b :cross-section (m/offset triangle -1))
-
-                              #_(up :angle (/ Math/PI 2) :curve-radius 20)
-                              #_(down :angle (/ Math/PI 2) :curve-radius 20)
-                              #_(left :angle (/ Math/PI 2) :curve-radius 20)
-                              (up :angle (/ Math/PI 2) :curve-radius 20)
-                              #_(forward :length 20)
-                              (left :angle Math/PI :curve-radius 20)
-                              (forward :length 20)
-                              (right :angle Math/PI :curve-radius 20)
-                              (up :angle Math/PI :curve-radius 20)
-                              (forward :length 20)
-                              (left :angle Math/PI :curve-radius 20)
-                              (forward :length 20)
-                              (up :angle Math/PI :curve-radius 20)
-                              (forward :length 40)
-                              (for [_ (range 3)]
-                                [(forward :length 20)
-                                 (down :angle (/ Math/PI 1) :curve-radius 4)
-                                 (forward :length 20)
-                                 (up :angle (/ Math/PI 1) :curve-radius 20)]))))
+                              (frame :name :a
+                                     :cross-section (m/difference triangle (m/offset triangle -1)))
+                              #_(frame :name :b :cross-section (m/offset triangle -1))
+                              (loft
+                               (up :angle (/ Math/PI 2) :curve-radius 20)
+                               (left :angle Math/PI :curve-radius 20)
+                               (forward :length 20)
+                               (right :angle Math/PI :curve-radius 20)
+                               (up :angle Math/PI :curve-radius 20)
+                               (forward :length 20)
+                               (left :angle Math/PI :curve-radius 20)
+                               (forward :length 20)
+                               (translate :z 70)
+                               (up :angle Math/PI :curve-radius 20)
+                               (forward :length 40)
+                               (for [_ (range 3)]
+                                 [(forward :length 20)
+                                  (down :angle (/ Math/PI 1) :curve-radius 4)
+                                  (forward :length 20)
+                                  (up :angle (/ Math/PI 1) :curve-radius 20)])))))
                 (m/get-mesh)))
       (m/export-mesh "test.glb"))
 

@@ -53,6 +53,11 @@
      (fn [{:keys [x y z]}]
        (or x y z))]]))
 
+(def mirror-schema
+  (ma/schema
+   [:map
+    [:normal [:tuple {:title "tmp"} number? number? number?]]]))
+
 (def rotate-schema
   [:map
    [:x {:optional true} number?]
@@ -75,14 +80,16 @@
 
 (def offset-schema
   [:map
-   [:offset number?]])
+   [:delta number?]
+   [:simplify {:optional true} number?]
+   [:join-type {:optional true} [:or [:= :square] [:= :square] [:= :miter]]]])
 
 (def add-ns-schema
   [:map
    [:namespace [:or keyword? string?]]])
 
 (def result-op-schema
-  [:sequential [:or keyword? string? sequential?]])
+  [:sequential [:or keyword? string? sequential? map?]])
 
 (def result-schema
   [:map

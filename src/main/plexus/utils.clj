@@ -112,22 +112,34 @@
         side-faces (for [[top bot] (partition 2 1 iter)
                          face (stich-layers vertices bot top poly-res)]
                      face)]
-    (println "bottom" (count bottom-face))
-    (println "top" (count top-face))
     (man/polyhedron vertices
                     (list* bottom-face
                            (rseq top-face)
                            side-faces))))
 
-(defn iso-hull-segments [segs]
+#_(defn iso-hull-segments [segs]
   (iso-hull (map (fn [seg]
-                     (let [m (meta seg)
-                           tf (:start-transform m)
-                           profile (:profile m)
-                           pts (:points (second profile))]
-                       (for [[x y] pts]
+                     (let [tf (:start-transform seg)
+                           section (:cross-section m)
+                           polys (man/to-polygons section)]
+                       (for [poly polys]
                          (-> tf
-                             (tf/go-forward x :x)
-                             (tf/go-forward y :y)
+                             (tf/go-forward (.x vert) :x)
+                             (tf/go-forward (.y vert) :y)
                              (tf/translation-vector)))))
                  segs)))
+
+
+#_(defn iso-hull-segments [segs]
+  (for [polys (apply map vector (map (fn [seg]
+                                       (let [tf (:start-transform seg)
+                                             section (:cross-section m)
+                                             polys (man/to-polygons section)]
+                                         (for [poly polys]
+                                           (for [vert poly]
+                                             (-> tf
+                                                 (tf/go-forward (.x vert) :x)
+                                                 (tf/go-forward (.y vert) :y)
+                                                 (tf/translation-vector))))))
+                                     segs))]
+    (iso-hull polys)))
