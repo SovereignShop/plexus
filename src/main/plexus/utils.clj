@@ -3,8 +3,8 @@
    [plexus.transforms :as tf]
    [clojure.core.matrix :as mat]
    [clj-manifold3d.core :as man]
-   [scad-clj.model :as m]
-   [malli.core :as ma]))
+   [malli.core :as ma]
+   [clj-manifold3d.core :refer [cross-section?]]))
 
 #_(mat/set-current-implementation :vectorz)
 
@@ -20,6 +20,7 @@
    (ma/predicate-schemas)
    {:neg-int (ma/-simple-schema {:type :neg-int, :pred neg-int?})
     :pos-int (ma/-simple-schema {:type :pos-int, :pred pos-int?})
+    :cross-section (ma/-simple-schema {:type :cross-section :pred cross-section?})
     :transform (ma/-simple-schema {:type :transform :pred tf/transform?})}))
 
 (defn bAc->a

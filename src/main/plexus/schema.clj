@@ -1,7 +1,8 @@
 (ns plexus.schema
   (:require
    [plexus.impl :as impl]
-   [malli.core :as ma]))
+   [malli.core :as ma]
+   [clj-manifold3d.core :as m]))
 
 (def curve-schema
   (ma/schema [:map
@@ -26,7 +27,7 @@
 (def frame-schema
   [:map
    [:name [:or keyword? string?]]
-   [:profile {:optional true} [:sequential any?]]])
+   [:cross-section {:optional true} :cross-section]])
 
 (def any-map-schema
   (ma/schema [:map]))
@@ -66,7 +67,7 @@
 
 (def transform-schema
   [:map
-   [:transform :transform]])
+   [:replace :transform]])
 
 (def branch-schema
   [:map

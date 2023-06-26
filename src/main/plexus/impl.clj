@@ -8,6 +8,8 @@
    [malli.core :as ma]
    [plexus.transforms :as tf]))
 
+(defrecord Extrusion [result-forms frames state angle-scalar forms transforms])
+
 (defn parse-args
   ([form]
    (parse-args form nil))
@@ -38,6 +40,8 @@
 
           :else
           [args (vec (cons x xs))])))
+
+(defn form? [x])
 
 (defn normalize-segment [segment]
   (if (sequential? segment)
@@ -78,22 +82,26 @@
           frames frames
           result-forms []]
      (if (nil? form)
-       {:result-forms result-forms
-        :frames frames
-        :state state
-        :angle-scalar angle-scalar
-        :forms (:forms state)
-        :transforms (:transforms state)}
+       (map->Extrusion
+        {:result-forms result-forms
+         :frames frames
+         :state state
+         :angle-scalar angle-scalar
+         :forms (:forms state)
+         :transforms (:transforms state)})
        (case (:op form)
 
          :plexus.impl/frame
          (let [frame-id (:name form)
 
                default-frame-id (:default-frame state)
+               default-frame (default-frame-id frames)
                frame (merge (if (contains? frames frame-id)
                               (get frames frame-id)
-                              (assoc (default-frame-id frames) :segments []))
-                            (select-keys form [:name :cross-section]))
+                              (assoc default-frame :segments []))
+                            (select-keys form [:name :cross-section :curve-radius])
+                            {:start-transform (:start-transform default-frame)
+                             :end-transform (:end-transform default-frame)})
                tv (tf/translation-vector (:end-transform frame))]
            (recur (-> state
                       (assoc :default-frame frame-id)
@@ -103,9 +111,10 @@
                   result-forms))
 
          :plexus.impl/forward
-         (let [{:keys [length z to n-steps transform-step-fn twist props gap]
+         (let [{:keys [length x y z z to n-steps transform-step-fn twist props gap center branch?]
                 :or {transform-step-fn (fn [tf i] tf)}} form
-               length (or z length)
+               axis (cond x :x y :y :else :z)
+               length (or length x y z)
                apply-to (or to current-frame-ids)]
            (recur state
                   forms
@@ -114,14 +123,20 @@
                      (let [frame (get frames frame-id)]
                        (assoc frames
                               frame-id
-                              (let [start-transform (:end-transform frame)
-                                    end-transform (m/translate start-transform [0 0 length])
+                              (let [start-transform (cond-> (:end-transform frame)
+                                                      center (m/translate [0 0 (- (/ length 2))])
+                                                      (= axis :x) (tf/rotate :x (/ Math/PI 2))
+                                                      (= axis :y) (tf/rotate :y (- (/ Math/PI 2))))
+                                    end-transform (cond-> start-transform
+                                                    true (tf/go-forward (cond-> length center (/ 2)) axis))
                                     step-length (if n-steps (/ length n-steps) length)
                                     all-transforms (conj (vec (for [step (range (quot length step-length))]
-                                                                (-> (tf/go-forward start-transform (* step step-length) :z)
+                                                                (-> (tf/go-forward start-transform (* step step-length) axis)
                                                                     (transform-step-fn step))))
                                                          end-transform)
-                                    frame (merge frame props)]
+                                    frame (merge frame props)
+                                    is-gap (or (true? gap)
+                                               (and (sequential? gap) (contains? (set gap) frame-id)))]
                                 (-> frame
                                     (assoc :end-transform end-transform
                                            :start-transform start-transform)
@@ -131,7 +146,7 @@
                                                    :start-transform start-transform
                                                    :end-transform end-transform
                                                    :all-transforms (if gap [] all-transforms)
-                                                   :manifold (when-let [cross-section (and (not gap) (:cross-section frame))]
+                                                   :manifold (when-let [cross-section (and (not is-gap) (:cross-section frame))]
                                                                (m/transform (m/extrude cross-section length) start-transform)))))))))
                    frames
                    apply-to)
@@ -213,30 +228,40 @@
                                       (fn [segments]
                                         (let [n-segments-before-loft (count (:segments before-frame))
                                               loft-segments (subvec segments n-segments-before-loft)
-                                              prev-segments (subvec segments 0 n-segments-before-loft)]
+                                              prev-segments (subvec segments 0 n-segments-before-loft)
+                                              first-segment (first loft-segments)]
                                           (conj prev-segments
                                                 {:start-transform (:start-transform (first loft-segments))
                                                  :end-transform (:end-transform (peek loft-segments))
-                                                 :manifold (m/loft (mapcat
-                                                                    (fn [{:keys [cross-section all-transforms]}]
-                                                                      (for [tf all-transforms]
-                                                                        {:cross-section cross-section
-                                                                         :frame tf}))
-                                                                    (remove nil? loft-segments)))})))))))
+                                                 :manifold (m/loft
+                                                            (cons
+                                                             {:frame (-> first-segment :all-transforms (nth 0))
+                                                              :cross-section (-> first-segment :cross-section)}
+                                                             (mapcat
+                                                              (fn [{:keys [cross-section all-transforms]}]
+                                                                (for [tf (if (> (count all-transforms) 1)
+                                                                           (next all-transforms)
+                                                                           all-transforms)]
+                                                                  {:cross-section cross-section
+                                                                   :frame tf}))
+                                                              (remove nil? loft-segments))))})))))))
                    (:frames ret)
                    loft-frames)
                   (into result-forms (:result-forms form))))
 
-
          (:plexus.impl/left :plexus.impl/right :plexus.impl/up :plexus.impl/down)
-         (let [{:keys [curve-radius angle to op transform-step-fn props gap]
-                :or {transform-step-fn (fn [tf angle] tf)}} form
+         (let [{:keys [curve-radius angle to op transform-step-fn props gap cs]
+                :or {transform-step-fn (fn [tf angle] tf)
+                     cs 20}} form
                apply-to (or to current-frame-ids)]
            (recur state
                   forms
                   (reduce
                    (fn [frames frame-id]
                      (let [frame (get frames frame-id)
+                           curve-radius (or curve-radius
+                                            (:curve-radius frame)
+                                            (throw (Exception. "No :curve-radius defined for frame or segment.")))
                            start-transform (:end-transform frame)
                            d (triangles/bAc->a curve-radius angle curve-radius)
                            r (- (/ Math/PI 2) (/ (- Math/PI angle) 2))
@@ -256,9 +281,11 @@
                                                            (f (sign (- a r)))))
                                                      curve-radius
                                                      angle
-                                                     20
+                                                     cs
                                                      transform-step-fn))
-                           frame (merge frame props)]
+                           frame (merge frame props)
+                           is-gap (or (true? gap)
+                                      (and (sequential? gap) (contains? (set gap) frame-id)))]
                        (assoc frames
                               frame-id
                               (-> frame
@@ -271,14 +298,15 @@
                                                  :end-transform end-transform
                                                  :all-transforms all-tfs
                                                  :manifold
-                                                 (when-let [cross-section (and (not gap) (:cross-section frame))]
+                                                 (when-let [cross-section (and (not is-gap) (:cross-section frame))]
                                                    (-> cross-section
+
                                                        (m/rotate 180)
                                                        (cond-> (= op :plexus.impl/up) (m/rotate -90)
                                                                (= op :plexus.impl/down) (m/rotate 90)
                                                                (= op :plexus.impl/right) (m/rotate 180))
                                                        (m/translate [curve-radius 0])
-                                                       (m/revolve 20 (* angle angle-scalar))
+                                                       (m/revolve cs (* angle angle-scalar))
                                                        (m/translate [(- curve-radius) 0 0])
                                                        (m/rotate [90 0 0])
                                                        (m/rotate [0 0 (case op
@@ -369,7 +397,8 @@
                                            :default-frame from
                                            :current-frame-ids with-frames)
                                     (normalize-segment (:plexus.impl/list form))
-                                    (select-keys frames (conj with-frames from)))]
+                                    frames
+                                    #_(select-keys frames (conj with-frames from)))]
            (recur (-> state
                       (update :transforms #(into (or % {}) (:transforms branch-ret))))
                   forms
@@ -378,7 +407,7 @@
                      (if (contains? ret frame-id)
                        (assoc ret
                               frame-id
-                              (update (get ret frame-id) :segments into (:segments branch-frame)))
+                              (assoc (get ret frame-id) :segments (:segments branch-frame)))
                        (assoc ret frame-id branch-frame)))
                    frames
                    (:frames branch-ret))
@@ -420,6 +449,20 @@
                   frames
                   result-forms))
 
+         :plexus.impl/transform
+         (let [{:keys [replace to]} form
+               apply-to (or to current-frame-ids)]
+           (recur state
+                  forms
+                  (reduce
+                   (fn [frames frame-id]
+                     (let [frame (get frames frame-id)]
+                       (assoc frames
+                              frame-id
+                              (assoc frame :end-transform replace))))
+                   frames
+                   apply-to)
+                  result-forms))
 
          (throw (Exception. (str "No matching clause for form: " form))))))))
 
@@ -453,7 +496,10 @@
                                     (throw (Exception. (str "Frame is not defined: " expr))))
                                   (if (map? expr)
                                     (if (= (:op expr) :plexus.impl/hull)
-                                      (m/hull (map eval-result (:plexus.impl/list expr)))
+                                      (m/hull (map eval-result (let [forms (:plexus.impl/list expr)]
+                                                                 (if (sequential? (ffirst forms))
+                                                                     (normalize-segment forms)
+                                                                     forms))))
                                       (let [manifold (eval-result (first (:plexus.impl/list expr)))]
                                         (case (:op expr)
                                           :plexus.impl/mirror (m/mirror manifold (:normal expr))

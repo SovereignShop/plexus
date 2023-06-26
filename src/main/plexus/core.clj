@@ -1,6 +1,7 @@
 (ns plexus.core
   (:refer-clojure :exclude [set])
   (:require
+   [clojure.java.io :as io]
    [plexus.utils :as u]
    [plexus.schema :as schema :refer [validate-form]]
    [clj-manifold3d.core :as m]
@@ -201,6 +202,9 @@
 (defn lookup-transform [extrusion key]
   (-> extrusion :transforms key))
 
+(defn get-frame [extrusion name]
+  (-> extrusion :frames name))
+
 (defn lookup-property [])
 
 (defn extrude [& forms]
@@ -225,10 +229,28 @@
                     :z `(nth ~sym 2)))]
     `(let [p# (impl/extrude ~forms*)]
        (impl/path-points p# (fn [~sym]
-                              (vector ~@clauses)) ~meta-props))))
+                              (vector ~@clauses))
+                         ~meta-props))))
 
 (defmacro defmodel [name & path]
   `(def ~@name (impl/extrude path)))
+
+(defn export-models
+  "Export Manifold and Extrusion vars in `namespace` using `file-ext` format."
+  [namespace file-ext]
+  (-> (io/file (format "out/%s" file-ext)) (.mkdirs))
+  (doall
+   (for [[_ x] (ns-map namespace)
+         :let [var-meta (meta x)]
+         :when (:export-model var-meta)]
+     (future
+       (let [filename (-> var-meta :name name (str (format ".%s" file-ext)))
+             m @x]
+         (if (m/manifold? m)
+           (m/export-mesh (m/get-mesh (cond-> m (= file-ext "3ds") (m/rotate [-90 0 0]))) (format "out/%s/%s" file-ext filename))
+           (let [manifold (cond-> (get (:frames m) (:main-frame m))
+                            (#{"3ds"} file-ext) (m/rotate [-90 0 0]))]
+             (m/export-mesh (m/get-mesh manifold) (format "out/%s/%s" file-ext filename)))))))))
 
 (comment
 
