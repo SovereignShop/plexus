@@ -10,6 +10,13 @@
 
 (defrecord Extrusion [result-forms frames state angle-scalar forms transforms])
 
+(defrecord Frame [start-transform segments is-transformed])
+
+(defrecord Segment [start-transform end-transform cross-section manifold is-transformed])
+
+;; Segments are relative to frames
+;; You can transform frames in result expresions.
+
 (defn parse-args
   ([form]
    (parse-args form nil))
@@ -127,7 +134,7 @@
                                                       center (m/translate [0 0 (- (/ length 2))])
                                                       (= axis :x) (tf/rotate :x (/ Math/PI 2))
                                                       (= axis :y) (tf/rotate :y (- (/ Math/PI 2))))
-                                    end-transform (cond-> start-transform
+                                    end-transform (cond-> (:end-transform frame)
                                                     true (tf/go-forward (cond-> length center (/ 2)) axis))
                                     step-length (if n-steps (/ length n-steps) length)
                                     all-transforms (conj (vec (for [step (range (quot length step-length))]
@@ -147,7 +154,7 @@
                                                    :end-transform end-transform
                                                    :all-transforms (if gap [] all-transforms)
                                                    :manifold (when-let [cross-section (and (not is-gap) (:cross-section frame))]
-                                                               (m/transform (m/extrude cross-section length) start-transform)))))))))
+                                                               (m/extrude cross-section length) ))))))))
                    frames
                    apply-to)
                   result-forms))
@@ -183,33 +190,6 @@
                    apply-to)
                   result-forms))
 
-         :plexus.impl/iso-hull
-         (let [{:keys [to]} form
-               hull-forms (normalize-segment (:plexus.impl/list form))
-               hull-frames (or to current-frame-ids)
-               ret (extrude* state hull-forms frames)]
-           (recur (:state ret)
-                  forms
-                  (reduce
-                   (fn [ret-frames frame-id]
-                     (let [before-frame (get frames frame-id)
-                           ret-frame (get ret-frames frame-id)]
-                       (assoc ret-frames
-                              frame-id
-                              (update ret-frame
-                                      :segments
-                                      (fn [segments]
-                                        (let [n-segments-before-hull (count (:segments before-frame))
-                                              hull-segments (subvec segments n-segments-before-hull)
-                                              prev-segments (subvec segments 0 n-segments-before-hull)]
-                                          (conj prev-segments
-                                                {:start-transform (:start-transform (first hull-segments))
-                                                 :end-transform (:end-transform (peek hull-segments))
-                                                 :manifold (apply m/hull (map :manifold (remove nil? hull-segments)))})))))))
-                   (:frames ret)
-                   hull-frames)
-                  (into result-forms (:result-forms ret))))
-
          :plexus.impl/loft
          (let [{:keys [to]} form
                loft-forms (normalize-segment (:plexus.impl/list form))
@@ -229,22 +209,25 @@
                                         (let [n-segments-before-loft (count (:segments before-frame))
                                               loft-segments (subvec segments n-segments-before-loft)
                                               prev-segments (subvec segments 0 n-segments-before-loft)
-                                              first-segment (first loft-segments)]
+                                              first-segment (first loft-segments)
+                                              start-tf (:start-transform (first loft-segments))]
                                           (conj prev-segments
-                                                {:start-transform (:start-transform (first loft-segments))
+                                                {:start-transform start-tf
                                                  :end-transform (:end-transform (peek loft-segments))
-                                                 :manifold (m/loft
-                                                            (cons
-                                                             {:frame (-> first-segment :all-transforms (nth 0))
-                                                              :cross-section (-> first-segment :cross-section)}
-                                                             (mapcat
-                                                              (fn [{:keys [cross-section all-transforms]}]
-                                                                (for [tf (if (> (count all-transforms) 1)
-                                                                           (next all-transforms)
-                                                                           all-transforms)]
-                                                                  {:cross-section cross-section
-                                                                   :frame tf}))
-                                                              (remove nil? loft-segments))))})))))))
+                                                 :manifold `(m/loft ~(remove nil? loft-segments))
+                                                 #_(-> (m/loft
+                                                      (cons
+                                                       {:frame (-> first-segment :all-transforms (nth 0))
+                                                        :cross-section (-> first-segment :cross-section)}
+                                                       (mapcat
+                                                        (fn [{:keys [cross-section all-transforms]}]
+                                                          (for [tf (if (> (count all-transforms) 1)
+                                                                     (next all-transforms)
+                                                                     all-transforms)]
+                                                            {:cross-section cross-section
+                                                             :frame tf}))
+                                                        (remove nil? loft-segments))))
+                                                     (m/transform (m/invert-frame start-tf)))})))))))
                    (:frames ret)
                    loft-frames)
                   (into result-forms (:result-forms form))))
@@ -314,7 +297,7 @@
                                                                         :plexus.impl/up -90
                                                                         :plexus.impl/down 90
                                                                         0)])
-                                                       (m/transform start-transform)))))))))
+                                                       #_(m/transform start-transform)))))))))
                    frames
                    apply-to)
                   result-forms))
@@ -381,11 +364,16 @@
                                       (fn [segments]
                                         (let [n-segments-before-hull (count (:segments before-frame))
                                               hull-segments (subvec segments n-segments-before-hull)
-                                              prev-segments (subvec segments 0 n-segments-before-hull)]
+                                              prev-segments (subvec segments 0 n-segments-before-hull)
+                                              start-tf (:start-transform (first hull-segments))]
                                           (conj prev-segments
-                                                {:start-transform (:start-transform (first hull-segments))
+                                                {:start-transform start-tf
                                                  :end-transform (:end-transform (peek hull-segments))
-                                                 :manifold (apply m/hull (map :manifold (remove nil? hull-segments)))})))))))
+                                                 :manifold `(m/hull ~(remove nil? hull-segments))
+                                                 #_(-> (apply m/hull (map (fn [{:keys [start-transform manifold]}]
+                                                                            (m/transform manifold start-transform))
+                                                                          (remove nil? hull-segments)))
+                                                       (m/transform (m/invert-frame start-tf)))})))))))
                    (:frames ret)
                    hull-frames)
                   (into result-forms (:result-forms ret))))
@@ -466,6 +454,24 @@
 
          (throw (Exception. (str "No matching clause for form: " form))))))))
 
+;; Frame valued...
+
+(Frame. start-transform end-transform cross-section segments)
+(Segment. start-transform end-transform cross-section manifold is-transformed)
+
+(-> [:a :b :c]
+    (p/rotate :a 20)
+    (p/translate :z 30)
+    (p/to-manifold)
+    #_(m/project :a))
+
+(-> (p/transform
+     :to [:a]
+     :update (fn [frame]
+               (-> frame
+                   (m/translate :x 20)
+                   (m/rotate :z 30)))))
+
 (defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
         frames (:frames result)
@@ -473,9 +479,9 @@
         result-forms (:result-forms result)
         unioned-frames (into {}
                              (comp (map (fn [[frame-id frame]]
-                                          (let [manifolds (remove nil? (map :manifold (:segments frame)))]
-                                            (when (pos? (count manifolds))
-                                              [frame-id (m/union manifolds)]))))
+                                          (let [segments (filter :manifold (:segments frame))]
+                                            (when (pos? (count segments))
+                                              [frame-id segments]))))
                                    (remove nil?))
                              (dissoc frames ::default-frame))
         main-frame-name (:name (first result-forms))
@@ -498,31 +504,37 @@
                                     (if (= (:op expr) :plexus.impl/hull)
                                       (m/hull (map eval-result (let [forms (:plexus.impl/list expr)]
                                                                  (if (sequential? (ffirst forms))
-                                                                     (normalize-segment forms)
-                                                                     forms))))
-                                      (let [manifold (eval-result (first (:plexus.impl/list expr)))]
+                                                                   (normalize-segment forms)
+                                                                   forms))))
+                                      (let [frame (eval-result (first (:plexus.impl/list expr)))]
                                         (case (:op expr)
-                                          :plexus.impl/mirror (m/mirror manifold (:normal expr))
-                                          :plexus.impl/translate (m/translate manifold [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])
-                                          :plexus.impl/rotate (m/rotate manifold [(* angle-scalar (or (:x expr) 0))
-                                                                                  (* angle-scalar (or (:y expr) 0))
-                                                                                  (* angle-scalar (or (:z expr) 0))])
+                                          :plexus.impl/mirror (update frame :manifold m/mirror (:normal expr))
+                                          :plexus.impl/translate (update frame :start-transform m/translate
+                                                                         [(or (:x expr) 0) (or (:y expr) 0) (or (:z expr) 0)])
+                                          :plexus.impl/rotate (update frame :start-transform m/rotate
+                                                                      [(* angle-scalar (or (:x expr) 0))
+                                                                       (* angle-scalar (or (:y expr) 0))
+                                                                       (* angle-scalar (or (:z expr) 0))])
                                           (throw (Exception. (str "Unkown expr: " expr))))))
                                     ((case (first expr)
                                        :plexus.impl/difference m/difference
                                        :plexus.impl/union m/union
                                        :plexus.impl/intersection m/intersection
                                        (throw (Exception. (str "Unknown expr: " (vec expr) " ( " (type expr) " )"))))
-                                     (map eval-result (if (and (sequential? (next expr))
-                                                               (sequential? (first (next expr)))
-                                                               (= (count (next expr)) 1))
-                                                        (second expr)
-                                                        (next expr)))))))
+                                     (map (fn project-frame [frame]
+                                            (m/transform (:manifold frame) (:start-transform frame)))
+                                          (map eval-result (if (and (sequential? (next expr))
+                                                                    (sequential? (first (next expr)))
+                                                                    (= (count (next expr)) 1))
+                                                             (second expr)
+                                                             (next expr))))))))
                               (:expr result-form))))
                     unioned-frames
                     (rseq result-forms)))))
 
 (str (type nil))
+
+(union :a :b :c)
 
 (defn path-points
   ([extrusion]
