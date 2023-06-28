@@ -29,20 +29,30 @@
   ([form]
    (parse-args form nil))
   ([form schema]
-   (loop [[arg & args] (next form)
-          kvs (transient {:op (first form)})]
-     (if (nil? arg)
-       (let [ret (persistent! kvs)]
-         (if schema
-           (ma/coerce schema ret nil {:registry u/registry})
-           ret))
-       (if (keyword? arg)
-         (recur (next args)
-                (assoc! kvs arg (first args)))
-         (let [ret (persistent! (assoc! kvs ::list (vec (cons arg args))))]
-           (if schema
-             (ma/coerce schema ret nil {:registry u/registry})
-             ret)))))))
+   (let [op (first form)]
+     (case op
+       (::union ::difference ::intersection ::hull)
+       {:op op ::list (next form)}
+       (if (map? (second form))
+         (let [op (first form)
+               args (nnext form)
+               ret (cond-> (assoc (second form) :op op)
+                     args (assoc ::list args))]
+           (ma/coerce schema ret nil {:registry u/registry}))
+         (loop [[arg & args] (next form)
+                kvs (transient {:op (first form)})]
+           (if (nil? arg)
+             (let [ret (persistent! kvs)]
+               (if schema
+                 (ma/coerce schema ret nil {:registry u/registry})
+                 ret))
+             (if (keyword? arg)
+               (recur (next args)
+                      (assoc! kvs arg (first args)))
+               (let [ret (persistent! (assoc! kvs ::list (vec (cons arg args))))]
+                 (if schema
+                   (ma/coerce schema ret nil {:registry u/registry})
+                   ret))))))))))
 
 (defn parse-path [path-spec]
   (loop [[x & xs] path-spec
@@ -110,14 +120,14 @@
          :plexus.impl/frame
          (let [frame-id (:name form)
                default-frame-id (:default-frame state)
-               default-frame (default-frame-id frames)
-               frame-transform (:segment-transform default-frame)
+               default-frame (get frames default-frame-id)
                frame (map->Frame (merge (if (contains? frames frame-id)
                                           (get frames frame-id)
-                                          (assoc default-frame :segments []))
-                                        (select-keys form [:name :cross-section :curve-radius])
-                                        {:frame-transform frame-transform
-                                         :segment-transform (m/frame 1)}))]
+                                          (assoc default-frame
+                                                 :segments []
+                                                 :segment-transform (m/frame 1)
+                                                 :frame-transform (:segment-transform default-frame)))
+                                        (select-keys form [:name :cross-section :curve-radius])))]
            (recur (-> state
                       (assoc :default-frame frame-id)
                       (update :current-frame-ids conj frame-id))
@@ -495,49 +505,48 @@
                                        (if-let [frame_ (get result-frames expr)]
                                          frame_
                                          (throw (Exception. (str "Frame is not defined: " expr))))
-                                       (if (map? expr)
-                                         (if (= (:op expr) :plexus.impl/hull)
-                                           (m/hull (map eval-result (let [forms (:plexus.impl/list expr)]
-                                                                      (if (sequential? (ffirst forms))
-                                                                        (normalize-segment forms)
-                                                                        forms))))
-                                           (let [ret (eval-result (first (or (:to expr) (:plexus.impl/list expr))))]
-                                             (case (:op expr)
-                                               :plexus.impl/mirror
-                                               (cond (frame? ret) (update (to-model ret) :manifold m/mirror (:normal expr))
-                                                     (model? ret) (update ret :manifold m/mirror (:normal expr))
-                                                     (m/manifold? ret) (m/mirror ret (:normal expr)))
+                                       (let [args (normalize-segment (::list expr))]
+                                         (case (:op expr)
+                                           :plexus.impl/hull
+                                           (m/hull (map to-manifold (map eval-result args)))
 
-                                               :plexus.impl/translate
-                                               (let [tr [(or (:x expr) 0)
-                                                         (or (:y expr) 0)
-                                                         (or (:z expr) 0)]]
-                                                 (cond (or (frame? ret) (model? ret)) (update ret :frame-transform m/translate tr)
+                                           :pleuxs.impl/mirror
+                                           (let [ret (eval-result (first args))]
+                                             (cond (frame? ret) (update (to-model ret) :manifold m/mirror (:normal expr))
+                                                   (model? ret) (update ret :manifold m/mirror (:normal expr))
+                                                   (m/manifold? ret) (m/mirror ret (:normal expr))))
 
-                                                       (m/manifold? ret) (m/translate ret tr)))
+                                           :plexus.impl/translate
+                                           (let [ret (eval-result (first args))
+                                                 tr [(or (:x expr) 0)
+                                                     (or (:y expr) 0)
+                                                     (or (:z expr) 0)]]
+                                             (cond (or (frame? ret) (model? ret)) (update ret :frame-transform m/translate tr)
 
-                                               :plexus.impl/rotate
-                                               (let [rot [(* angle-scalar (or (:x expr) 0))
-                                                          (* angle-scalar (or (:y expr) 0))
-                                                          (* angle-scalar (or (:z expr) 0))]]
-                                                 (cond (or (frame? ret) (model? ret)) (update ret :frame-transform m/rotate
-                                                                                              [(or (:x expr) 0)
-                                                                                               (or (:y expr) 0)
-                                                                                               (or (:z expr) 0)]                                    )
+                                                   (m/manifold? ret) (m/translate ret tr)))
 
-                                                       (m/manifold? ret) (m/rotate ret rot)))
-                                               (throw (Exception. (str "Unkown expr: " expr))))))
-                                         ((case (first expr)
-                                            :plexus.impl/difference m/difference
-                                            :plexus.impl/union m/union
-                                            :plexus.impl/intersection m/intersection
-                                            (throw (Exception. (str "Unknown expr: " (vec expr) " ( " (type expr) " )"))))
-                                          (map to-manifold
-                                               (map eval-result (if (and (sequential? (next expr))
-                                                                         (sequential? (first (next expr)))
-                                                                         (= (count (next expr)) 1))
-                                                                  (second expr)
-                                                                  (next expr))))))))
+                                           :plexus.impl/rotate
+                                           (let [ret (eval-result (first args))
+                                                 rot [(* angle-scalar (or (:x expr) 0))
+                                                      (* angle-scalar (or (:y expr) 0))
+                                                      (* angle-scalar (or (:z expr) 0))]]
+                                             (cond (or (frame? ret) (model? ret)) (update ret :frame-transform m/rotate
+                                                                                          [(or (:x expr) 0)
+                                                                                           (or (:y expr) 0)
+                                                                                           (or (:z expr) 0)]                                    )
+
+                                                   (m/manifold? ret) (m/rotate ret rot)))
+
+                                           :plexus.impl/union
+                                           (m/union (map to-manifold (map eval-result args)))
+
+                                           :plexus.impl/difference
+                                           (m/difference (map to-manifold (map eval-result args)))
+
+                                           :plexus.impl/intersection
+                                           (m/intersection (map to-manifold (map eval-result args)))
+
+                                           (throw (Exception. (str "Unknown expr: " (vec expr) " ( " (type expr) " )")))))))
                                    (:expr result-form))))
                          unioned-frames
                          (rseq result-forms))))))))

@@ -155,13 +155,13 @@
   (validate-form `(:plexus.impl/result ~@args) schema/result-schema))
 
 (defn union [& args]
-  (ma/coerce schema/result-op-schema `(:plexus.impl/union ~@args) nil {:registry u/registry}))
+  (validate-form `(:plexus.impl/union ~@args) schema/result-op-schema))
 
 (defn intersection [& args]
-  (ma/coerce schema/result-op-schema `(:plexus.impl/intersection ~@args) nil {:registry u/registry}))
+  (validate-form `(:plexus.impl/intersection ~@args) schema/result-op-schema))
 
 (defn difference [& args]
-  (ma/coerce schema/result-op-schema `(:plexus.impl/difference ~@args) nil {:registry u/registry}))
+  (validate-form `(:plexus.impl/difference ~@args) schema/result-op-schema))
 
 (defn slice [& args]
   (validate-form `(:plexus.impl/slice ~@args) [:map [:length number?]]))
