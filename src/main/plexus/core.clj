@@ -205,6 +205,9 @@
 (defn get-frame [extrusion name]
   (-> extrusion :frames name))
 
+(defn get-model [extrusion name]
+  (-> extrusion :models name))
+
 (defn lookup-property [])
 
 (defn extrude [& forms]

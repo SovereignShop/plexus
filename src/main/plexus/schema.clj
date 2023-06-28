@@ -83,7 +83,7 @@
   [:map
    [:delta number?]
    [:simplify {:optional true} number?]
-   [:join-type {:optional true} [:or [:= :square] [:= :square] [:= :miter]]]])
+   [:join-type {:optional true} [:or [:= :square] [:= :round] [:= :miter]]]])
 
 (def add-ns-schema
   [:map
