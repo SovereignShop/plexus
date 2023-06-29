@@ -56,7 +56,7 @@
             (m/rotatev angle ortho)
             (m/rotatev (- angle-2) ortho-2))))))
 
-(defn extrude-rotate [{:keys [angle elevation step-fn model curve-radius face-number] :or {elevation 0} :as args} block]
+#_(defn extrude-rotate [{:keys [angle elevation step-fn model curve-radius face-number] :or {elevation 0} :as args} block]
   (if (and (not step-fn) (= 0 elevation))
     [block (->> block
                 (m/rotatec [0 0 (- (/ Math/PI 2))])

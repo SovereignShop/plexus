@@ -110,12 +110,13 @@
   (validate-form `(:plexus.impl/transform ~@args) schema/transform-schema))
 
 (defn spin [& args]
-  (validate-form `(:plexus.impl/spin ~@args)
-                 schema/any-map-schema))
+  (validate-form `(:plexus.impl/spin ~@args) schema/any-map-schema))
 
 (defn set [& args]
-  (validate-form `(:plexus.impl/set ~@args)
-                 schema/any-map-schema))
+  (validate-form `(:plexus.impl/set ~@args) schema/any-map-schema))
+
+(defn set-meta [& args]
+  (validate-form `(:plexus.impl/set-meta ~@args) schema/any-map-schema))
 
 (defn branch [& args]
   (validate-form `(:plexus.impl/branch ~@args) schema/branch-schema))
@@ -171,6 +172,9 @@
 
 (defn import [& args]
   (validate-form `(:plexus.impl/import ~@args) schema/import-schema))
+
+(defn insert [& args]
+  (validate-form `(:plexus.impl/insert ~@args) schema/any-map-schema))
 
 (defn show-coordinate-frame [& args]
   (validate-form `(:plexus.impl/show-coordinate-frame ~@args) schema/show-coordinate-frames-schema))

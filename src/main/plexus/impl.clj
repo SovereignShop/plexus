@@ -17,13 +17,47 @@
 (defrecord Model [frame-transform manifold is-transformed])
 
 (defn frame? [x]
-  (instance? Frame x))
+  (instance? plexus.impl.Frame x))
 
 (defn model? [x]
-  (instance? Model x))
+  (instance? plexus.impl.Model x))
 
-;; Segments are relative to frames
-;; You can transform frames in result expresions.
+(defn to-model [frame]
+  (let [manifolds (remove nil? (map :manifold (:segments frame)))
+        manifold (if (pos? (count manifolds))
+                   (m/union manifolds)
+                   (m/manifold))]
+    (Model. (:frame-transform frame) manifold false)))
+
+(defn project-model [model]
+  (if (:is-transformed model)
+    model
+    (let [tf (:frame-transform model)
+          manifold (:manifold model)]
+      (Model. tf (m/transform manifold tf) true))))
+
+(defn unproject-model [model]
+  (if (:is-transformed model)
+    (let [tf (:frame-transform model)
+          manifold (:manifold model)]
+      (Model. tf (m/transform manifold (m/invert-frame tf)) true))
+    model))
+
+(defn to-manifold [x]
+  (cond (frame? x) (-> x to-model project-model :manifold)
+        (model? x) (-> x project-model :manifold)
+        (m/manifold? x) x
+        :else (throw (IllegalArgumentException. (str "Argument must be Frame, Model or Manifold. Recieved: " (type x))))))
+
+(defn parse-hull [form]
+  (if (= (fnext form) :to)
+    (let [[op _ to & args] form]
+      {:op op :to to ::list args})
+    (if (map? (second form))
+      (if (:op (second form))
+        {:op (first form) ::list (next form)}
+        (assoc (second form) :op (first form) ::list (nnext form)))
+      {:op (first form) ::list (next form)})))
 
 (defn parse-args
   ([form]
@@ -31,8 +65,9 @@
   ([form schema]
    (let [op (first form)]
      (case op
-       (::union ::difference ::intersection ::hull)
+       (::union ::difference ::intersection)
        {:op op ::list (next form)}
+       ::hull (parse-hull form)
        (if (map? (second form))
          (let [op (first form)
                args (nnext form)
@@ -96,7 +131,8 @@
    (extrude* {:current-frame-ids #{}
               :default-frame ::default-frame
               :forms forms
-              :angle-scalar 57.29578}
+              :angle-scalar 57.29578
+              :models {}}
              forms
              {::default-frame {:frame-transform (tf/transform)
                                :segment-transform (tf/transform)
@@ -114,20 +150,25 @@
          :angle-scalar angle-scalar
          :forms (:forms state)
          :transforms (:transforms state)
-         :models {}})
+         :models (:models state)})
        (case (:op form)
 
          :plexus.impl/frame
          (let [frame-id (:name form)
                default-frame-id (:default-frame state)
                default-frame (get frames default-frame-id)
-               frame (map->Frame (merge (if (contains? frames frame-id)
-                                          (get frames frame-id)
-                                          (assoc default-frame
-                                                 :segments []
-                                                 :segment-transform (m/frame 1)
-                                                 :frame-transform (:segment-transform default-frame)))
-                                        (select-keys form [:name :cross-section :curve-radius])))]
+               frame-transform (MatrixTransforms/CombineTransforms
+                                (:frame-transform default-frame)
+                                (:segment-transform default-frame))
+               frame (with-meta
+                       (map->Frame (merge (if (contains? frames frame-id)
+                                            (get frames frame-id)
+                                            (assoc default-frame
+                                                   :segments []
+                                                   :segment-transform (m/frame 1)
+                                                   :frame-transform frame-transform))
+                                          (select-keys form [:name :cross-section :curve-radius])))
+                       (or (:meta form) {}))]
            (recur (-> state
                       (assoc :default-frame frame-id)
                       (update :current-frame-ids conj frame-id))
@@ -167,10 +208,12 @@
                                     (assoc :segment-transform end-transform)
                                     (update :segments
                                             conj
-                                            (Segment. start-transform end-transform all-transforms cross-section
-                                                      (when cross-section
-                                                        (m/transform (m/extrude cross-section length) start-transform))
-                                                      true)))))))
+                                            (with-meta
+                                              (Segment. start-transform end-transform all-transforms cross-section
+                                                        (when cross-section
+                                                          (m/transform (m/extrude cross-section length) start-transform))
+                                                        true)
+                                              (meta frame))))))))
                    frames
                    apply-to)
                   result-forms))
@@ -184,6 +227,19 @@
                    (fn [frames frame-id]
                      (let [frame (get frames frame-id)]
                        (update frames frame-id merge (dissoc form :to :op))))
+                   frames
+                   apply-to)
+                  result-forms))
+
+         :plexus.impl/set-meta
+         (let [{:keys [to]} form
+               apply-to (or to current-frame-ids)]
+           (recur state
+                  forms
+                  (reduce
+                   (fn [frames frame-id]
+                     (let [frame (get frames frame-id)]
+                       (assoc frames frame-id (vary-meta frame merge (dissoc form :to :op)))))
                    frames
                    apply-to)
                   result-forms))
@@ -229,20 +285,22 @@
                                               last-segment (peek loft-segments)
                                               start-tf (:start-transform (first loft-segments))]
                                           (conj prev-segments
-                                                (Segment. start-tf (:end-transform (peek loft-segments)) [] nil
-                                                          (m/loft
-                                                           (cons
-                                                            {:frame (-> first-segment :all-transforms (nth 0))
-                                                             :cross-section (-> first-segment :cross-section)}
-                                                            (mapcat
-                                                             (fn [{:keys [cross-section all-transforms]}]
-                                                               (for [tf (if (> (count all-transforms) 1)
-                                                                          (next all-transforms)
-                                                                          all-transforms)]
-                                                                 {:cross-section cross-section
-                                                                  :frame tf}))
-                                                             (remove nil? loft-segments))))
-                                                          true))))))))
+                                                (with-meta
+                                                  (Segment. start-tf (:end-transform (peek loft-segments)) [] nil
+                                                            (m/loft
+                                                             (cons
+                                                              {:frame (-> first-segment :all-transforms (nth 0))
+                                                               :cross-section (-> first-segment :cross-section)}
+                                                              (mapcat
+                                                               (fn [{:keys [cross-section all-transforms]}]
+                                                                 (for [tf (if (> (count all-transforms) 1)
+                                                                            (next all-transforms)
+                                                                            all-transforms)]
+                                                                   {:cross-section cross-section
+                                                                    :frame tf}))
+                                                               (remove nil? loft-segments))))
+                                                            true)
+                                                  (meta ret-frame)))))))))
                    (:frames ret)
                    loft-frames)
                   (into result-forms (:result-forms form))))
@@ -307,7 +365,9 @@
                                   (assoc :segment-transform end-transform)
                                   (update :segments
                                           conj
-                                          (Segment. start-transform end-transform all-tfs cross-section manifold true))))))
+                                          (with-meta
+                                            (Segment. start-transform end-transform all-tfs cross-section manifold true)
+                                            (meta frame)))))))
                    frames
                    apply-to)
                   result-forms))
@@ -378,7 +438,9 @@
                                               start-transform (:start-transform (first hull-segments))
                                               end-transform (:end-transform (peek hull-segments))
                                               manifold (apply m/hull (remove nil? (map :manifold hull-segments)))]
-                                          (conj prev-segments (Segment. start-transform end-transform [] nil manifold true))))))))
+                                          (conj prev-segments (with-meta
+                                                                (Segment. start-transform end-transform [] nil manifold true)
+                                                                (meta ret-frame)))))))))
                    (:frames ret)
                    hull-frames)
                   (into result-forms (:result-forms ret))))
@@ -457,35 +519,52 @@
                    apply-to)
                   result-forms))
 
+         :plexus.impl/insert
+         (let [{:keys [extrusion models at ns end-frame]} form
+               default-frame-id (:default-frame state)
+               at (or at default-frame-id)
+               base-frame (get frames at)
+               base-frame-transform (MatrixTransforms/CombineTransforms
+                                     (:frame-transform base-frame)
+                                     (:segment-transform base-frame))
+               extrusion-models (:models extrusion)
+               insert-end-frame (-> extrusion :frames end-frame)
+               end-transform (MatrixTransforms/CombineTransforms
+                              (:frame-transform insert-end-frame)
+                              (:segment-transform insert-end-frame))]
+           (recur (update state :models merge
+                          (reduce
+                           (fn [models model-id]
+                             (let [model (m/transform (get extrusion-models model-id)
+                                                      base-frame-transform)
+                                   full-model-id (if ns
+                                                   (keyword (name ns) (name model-id))
+                                                   model-id)]
+                               (assoc models full-model-id model)))
+                           extrusion-models
+                           models))
+                  forms
+                  (reduce
+                   (fn [frames frame-id]
+                     (let [frame (get frames frame-id)]
+                       (assoc frames frame-id
+                              (assoc frame
+                                     :segment-transform
+                                     (MatrixTransforms/CombineTransforms
+                                      end-transform
+                                      (:segment-transform frame))))))
+                   frames
+                   current-frame-ids)
+                  result-forms))
+
          (throw (Exception. (str "No matching clause for form: " form))))))))
-
-(defn to-model [frame]
-  (let [manifolds (remove nil? (map :manifold (:segments frame)))
-        manifold (if (pos? (count manifolds))
-                   (m/union manifolds)
-                   (m/manifold))]
-    (Model. (:frame-transform frame) manifold false)))
-
-(defn project-model [model]
-  (if (:is-transformed model)
-    model
-    (let [tf (:frame-transform model)
-          tr (#(vector (.x %) (.y %) (.z %)) (.getColumn tf 3))
-          manifold (:manifold model)]
-      (Model. tf (m/transform manifold tf) true))))
-
-(defn to-manifold [x]
-  (cond (frame? x) (-> x to-model project-model :manifold)
-        (model? x) (-> x project-model :manifold)
-        (m/manifold? x) x
-        :else (throw (IllegalArgumentException. (str "Argument must be Frame, Model or Manifold. Recieved: " (type x))))))
 
 (defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
         frames (:frames result)
         angle-scalar (:angle-scalar result)
         result-forms (:result-forms result)
-        unioned-frames (dissoc frames ::default-frame)
+        unioned-frames (merge (dissoc frames ::default-frame) (:models result))
         main-model-name (:name (first result-forms))]
     (-> result
         (assoc :main-model main-model-name)
@@ -562,7 +641,7 @@
                           (next (:all-transforms seg)))
                     meta-fn (if meta-props
                               (fn [x]
-                                (with-meta x (select-keys seg meta-props)))
+                                (with-meta x (select-keys (meta seg) meta-props)))
                               identity)]
               tf (->> tfs
                       (map tf/translation-vector)
