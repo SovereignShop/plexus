@@ -162,7 +162,8 @@
                                 (:segment-transform default-frame))
                frame (with-meta
                        (map->Frame (merge (if (contains? frames frame-id)
-                                            (get frames frame-id)
+                                            (assoc (get frames frame-id)
+                                                   :segment-transform (:segment-transform default-frame))
                                             (assoc default-frame
                                                    :segments []
                                                    :segment-transform (m/frame 1)
@@ -455,7 +456,8 @@
                                     frames
                                     #_(select-keys frames (conj with-frames from)))]
            (recur (-> state
-                      (update :transforms #(into (or % {}) (:transforms branch-ret))))
+                      (update :transforms #(into (or % {}) (:transforms branch-ret)))
+                      (update :models merge (:models branch-ret)))
                   forms
                   (reduce-kv
                    (fn [ret frame-id branch-frame]
@@ -499,7 +501,10 @@
                namespace (:namespace frame)
                transform-name (cond->> name
                                 namespace (->keyword namespace))]
-           (recur (update state :transforms assoc transform-name (:end-transform frame))
+           (recur (update state :transforms assoc transform-name
+                          (MatrixTransforms/CombineTransforms
+                           (:frame-transform frame)
+                           (:segment-transform frame)))
                   forms
                   frames
                   result-forms))
@@ -565,7 +570,8 @@
         angle-scalar (:angle-scalar result)
         result-forms (:result-forms result)
         unioned-frames (merge (dissoc frames ::default-frame) (:models result))
-        main-model-name (:name (first result-forms))]
+        main-model-name (or (:name (first result-forms))
+                            (key (first (dissoc frames ::default-frame))))]
     (-> result
         (assoc :main-model main-model-name)
         (assoc :models
