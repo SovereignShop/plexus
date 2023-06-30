@@ -2,7 +2,9 @@
 
 Plexus defines a simple, extensible language for defining polygons and extruding them in a piecewise fashion using egocentric reference frames.
 
-You can specify 3D models by providing a series of extrusions to a set of profiles, which are then composited using CSG operations.
+You can specify 3D models by providing a series of extrusions to a set of cross sections, which are then composited using CSG operations.
+
+
 
 # Status
 
@@ -12,49 +14,57 @@ Pre-alpha, syntax and internals likely to change.
 
 In the following example, our outer profile is a circle with radius of 6. The mask
 profile is a circle of radius 4. We then specify a series of egocentric transformations to the
-outer and inner profiles. 
+outer and inner cross sections. 
 
 ``` clojure
-(require '[scad-clj.scad :as s]
-         '[scad-clj.model :as m]
-         '[plexus.core :refer [frame left right forward up down hull extrude set branch]]
+(require
+ '[clj-manifold3d.core :as m]
+ '[plexus.core
+   :refer [result frame left right forward up down hull extrude set branch arc defmodel
+           rotate translate segment difference union intersection points export insert
+           loft trim-by-plane offset]])
 
-(->> (extrude
-      (result :name :pipes 
-              :expr (difference :outer :inner))
-      
-      (frame :profile (m/circle 6) :name :outer)
-      (frame :profile (m/circle 4) :name :inner)
-      (set :curve-radius 20 :fn 70 :to [:outer]) (set :curve-radius 20 :fn 70 :to [:inner])
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
 
-      (left :angle (/ Math/PI 2) :to [:outer]) (left :angle (/ Math/PI 2) :to [:inner])
-      (right :angle (/ Math/PI 2) :to [:outer]) (right :angle (/ Math/PI 2) :to [:inner])
-      (forward :length 10 :to [:outer]) (forward :length 10 :to [:inner])
-      (up :to [:outer]) (up :to [:inner]))
-     (s/write-scad)
-     (spit "test.scad"))
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 20 :to [:body]) (set :curve-radius 20 :to [:mask])
+
+     (left :angle (/ Math/PI 2) :to [:body])
+     (left :angle (/ Math/PI 2) :to [:mask])
+
+     (right :angle (/ Math/PI 2) :to [:body])
+     (right :angle (/ Math/PI 2) :to [:mask])
+
+     (forward :length 10 :to [:body])
+     (forward :length 10 :to [:mask])
+
+     (up :angle (/ Math/PI 2) :to [:body])
+     (up :angle (/ Math/PI 2) :to [:mask]))
+    (export "test.glb"))
 ```
 
 Obviously there is a lot of code duplication here. After providing the profile for the inner and outer forms,
 the transformations we apply to each are equivalent. We can get rid of that duplication by only providing one 
-transforming both profiles with each segment:
+transforming both cross sections with each segment:
 
 ``` clojure
-(->> (extrude 
-      (result :name :pipes
-              :expr (difference :outer :inner))
-                  
-      (frame :profile (m/circle 6) :name :outer)
-      (frame :profile (m/circle 4) :name :inner)
-      (set :curve-radius 20 :fn 70 :to [:outer :inner])
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
 
-      (left :angle (/ Math/PI 2) :to [:outer :inner])
-      (right :angle (/ Math/PI 2) :to [:outer :inner])
-      (forward :length 10 :to [:outer :inner])
-      (up :to [:outer :inner])
-      (forward :length 20 :to [:outer :inner]))
-     (s/write-scad)
-     (spit "test.scad"))
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 20 :to [:body :mask])
+
+     (left :angle (/ Math/PI 2) :to [:body :mask])
+     (right :angle (/ Math/PI 2) :to [:body :mask])
+     (forward :length 10 :to [:body :mask])
+     (up :angle (/ Math/PI 2) :to [:body :mask]))
+    (export "pipes.glb"))
+
 ```
 
 ![Pipe Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/pipe-example.png)
@@ -64,167 +74,156 @@ This is equivalent to the one above, but we can still see there is a lot of dupl
 We can elide this, as by default each segement will reply to every frame you have defined:
 
 ``` clojure
-(->> (extrude
-      (result :name :pipes
-              :expr (difference :outer :inner))
-                   
-      (frame :profile (m/circle 6) :name :outer)
-      (frame :profile (m/circle 4) :name :inner)
-      (set :curve-radius 20 :fn 70)
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
 
-      (left :angle (/ Math/PI 2))
-      (right :angle (/ Math/PI 2))
-      (forward :length 10)
-      (up)
-      (forward :length 20))
-     (s/write-scad)
-     (spit "test.scad"))
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 20)
+
+     (left :angle (/ Math/PI 2))
+     (right :angle (/ Math/PI 2))
+     (forward :length 10)
+     (up :angle (/ Math/PI 2) :to [:body :mask]))
+    (export "pipes.glb"))
 ```
 
 This extrude is equivalent to the one above.
 
 ## Hulls
 
-Hulls are often a great way to transform between profiles using openscad. Hulls in plexus
-are applied in a stack-like fashion to the previous two profiles:
+Hulls are often a great way to transform between cross sections. Hulls in plexus
+are applied in a stack-like fashion to the previous two cross sections:
 
 ``` clojure
-(->> (extrude 
-      (result :name :pipes
-              :expr (difference :outer :inner))
-                   
-      (frame :profile (m/circle 6) :name :outer)
-      (frame :profile (m/circle 4) :name :inner)
-      (set :curve-radius 20 :fn 70)
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
 
-      (forward :length 20)
-
-      (set :profile (m/square 20 20) :to [:outer])
-      (set :profile (m/square 16 16) :to [:inner])
-
-      (forward :length 20)
-      (hull)
-      (forward :length 20)
-
-      (set :profile (m/circle 6) :to [:outer])
-      (set :profile (m/circle 4) :to [:inner])
-
-      (forward :length 20)
-      (hull))
-     (s/write-scad)
-     (spit "test.scad"))
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 20)
+     (hull
+      (hull
+       (forward :length 20)
+       (set :cross-section (m/square 20 20 true) :to [:body])
+       (set :cross-section (m/square 16 16 true) :to [:mask])
+       (forward :length 20))
+      (set :cross-section (m/circle 6) :to [:body])
+      (set :cross-section (m/circle 4) :to [:mask])
+      (forward :length 20)))
+    (export "hull.glb"))
 ```
 
 ![Hull Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/hull-example.png)
 
 i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack. You can specify the parameter `n-segments` if you'd like to hull between several segments.
 
+## Lofts 
+
+You can loft between a sequence of isomorphic cross-sections with `loft`. Edges are constructed between corresponding
+vertices of each cross-section.
+
+``` clojure
+(-> (extrude
+     (result :name :pipes :expr :body)
+     (frame :cross-section (m/difference (m/circle 20) (m/circle 18)) :name :body)
+     (loft
+      (forward :length 1)
+      (for [i (range 3)]
+        [(translate :x 8)
+         (forward :length 20)
+         (translate :x -8)
+         (forward :length 20)])))
+    (export "loft.glb"))
+```
+
+![Loft Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/loft-example.png)
+
 ## Branching
 
-Branches work as you'd expect:
+Branches work as you'd expect.
 
-``` clojure    
-(->> (extrude 
-      (result :name :pipes
-              :expr (difference :outer :inner))
-              
-      (frame :profile (m/circle 6) :name :outer)
-      (frame :profile (m/circle 4) :name :inner)
-      (set :curve-radius 10 :fn 70)
+``` clojure
+(def pi|2 (/ Math/PI 2))
 
-      (branch :from :outer (left) (right) (forward :length 20))
-      (branch :from :outer (right) (left) (forward :length 20)))
-     (s/write-scad)
-     (spit "test.scad"))
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 10)
+
+     (branch :from :body (left :angle pi|2) (right :angle pi|2) (forward :length 20))
+     (branch :from :body (right :angle pi|2) (left :angle pi|2) (forward :length 20)))
+    (export "branch.glb"))
 ```
 
 ![Branching Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/branching-example.png)
 
 
-        The body of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
+The body of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
 
 ## Gaps
 
 You can make any segment a gap with the gap parameter:
 
 ``` clojure
-(->> (extrude
-      (result :name :pipes
-              :expr (difference :outer :inner))
-      (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-      (left :angle (/ Math/PI 2) :gap true)
-      (right :angle (/ Math/PI 2))
-      (left :gap true)
-      (right)
-      (left :gap true)
-      (right))
-     (s/write-scad)
-     (spit "test.scad"))
-
+(-> (extrude
+     (frame :cross-section (m/circle 6) :name :body :curve-radius 10)
+     (for [i (range 3)]
+       [(left :angle (/ Math/PI 2) :gap true)
+        (right :angle (/ Math/PI 2))]))
+    (export "gaps.glb"))
 ```
 
 ![Gap Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/gap-example.png)
 
-## Segments
+Notice notice the extrude forms automatically flattened. You can arbitrarily nest loops.
 
-`segment` is kind of like a `do` in clojure. Importantly, they enable you to use loops in your extrude definition.
+## Composition
+
+The easiest way to compose extrusions is with `insert`. 
 
 ``` clojure
-(->> (extrude
-      (result :name :pipes
-              :expr (difference :outer :inner))
-      (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-      (frame :profile (m/circle 4) :name :inner)
-      (segment
+(let [pipe (extrude
+            (frame :cross-section (m/circle 6) :name :outer :curve-radius 10)
+            (frame :cross-section (m/circle 4) :name :inner)
+            (forward :length 30))]
+  (-> (extrude
+       (result :name :pipes
+               :expr (trim-by-plane {:normal [-1 0 0]} (difference :pipe/outer :pipe/inner)))
+       (frame :name :origin)
+       (translate :z 5)
+
        (for [i (range 4)]
          (branch
-          :from :outer
+          :from :origin
           (rotate :x (* i 1/2 Math/PI))
-          (forward :length 30)))))
-    (s/write-scad)
-    (spit "test.scad"))
+          (insert :extrusion pipe
+                  :models [:outer :inner]
+                  :ns :pipe
+                  :end-frame :outer))))
+      (export "insert.glb")))
 ```
 
-![Segment Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/segment-example.png)
-
-Also use `segment` to nest paths.
-
-``` clojure
-(let [pipe-path (extrude
-                 (frame :profile (m/circle 6) :name :outer :curve-radius 10 :fn 70)
-                 (frame :profile (m/circle 4) :name :inner)
-                 (forward :length 30))]
-  (->> (extrude
-        (result :name :pipes
-                :expr (difference :outer :inner))
-        (frame :name :origin)
-
-        (segment
-         (for [i (range 4)]
-           (branch
-            :from :origin
-            (rotate :x (* i 1/2 Math/PI))
-            (segment pipe-path)))))
-            
-        (s/write-scad)
-        (spit "test.scad")))
-```
-
-This produces equivalent output to above. Notice the nested pipes-path inherits the frame in which it's placed.
+![Segment Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/insert-example.png)
 
 ## Points
 
 `points` is similar to `extrude` except you use it to define 2D polygons. Here's an example of how to define a circle.
 
 ``` clojure
-(->> (m/polygon
-      (points
-       :axes [:x :z]
-       (frame :name :origin :fn 20)
-       (translate :x 50)
-       (left :angle (* 2 Math/PI) :curve-radius 50)))
-     (s/write-scad)
-     (spit "test.scad"))
+(-> (m/cross-section
+     (points
+      :axes [:x :z]
+      (frame :name :origin)
+      (translate :x 50)
+      (left :angle (* 2 Math/PI) :curve-radius 50 :cs 20)))
+    (m/extrude 1)
+    (export "circle.glb"))
 ```
 
 ![Points Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/points-example.png)

@@ -262,5 +262,8 @@
                             (#{"3ds"} file-ext) (m/rotate [-90 0 0]))]
              (m/export-mesh (m/get-mesh manifold) (format "out/%s/%s" file-ext filename)))))))))
 
-(defn export [model filename]
-  (m/export-mesh (m/get-mesh (impl/to-manifold model)) filename))
+(defn export
+  ([model filename]
+   (export model filename (m/material)))
+  ([model filename material]
+   (m/export-mesh (m/get-mesh (impl/to-manifold model)) filename :material material)))
