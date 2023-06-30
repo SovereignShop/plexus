@@ -179,6 +179,9 @@
 (defn show-coordinate-frame [& args]
   (validate-form `(:plexus.impl/show-coordinate-frame ~@args) schema/show-coordinate-frames-schema))
 
+(defn trim-by-plane [& args]
+  (validate-form `(:plexus.impl/trim-by-plane ~@args) schema/any-map-schema))
+
 (defn pattern [& args]
   (let [{:keys [from axis distances angles namespaces end-at :plexus.impl/list]} (impl/parse-args (list* :na args))]
     (assert (or angles distances))
@@ -259,61 +262,5 @@
                             (#{"3ds"} file-ext) (m/rotate [-90 0 0]))]
              (m/export-mesh (m/get-mesh manifold) (format "out/%s/%s" file-ext filename)))))))))
 
-(comment
-
-  (-> (m/cross-section (points
-                        :axes [:x :y]
-                        (frame :name :origin :fn 10)
-                        (translate :x 50)
-                        (left :angle (* 2 Math/PI) :curve-radius 50)))
-      (m/extrude 100)
-      (m/get-mesh)
-      (m/export-mesh "test.glb"))
-
-  (def triangle
-    (m/cross-section [[-10 0] [10 0] [0 10]]))
-
-  (m/offset triangle -1)
-
-  (-> (time (-> (:c (:frames (extrude
-                              (result :name :c
-                                      :expr (->> (difference :a #_:b)
-                                                 #_(translate :x 30 :y 70)))
-
-                              (frame :name :a
-                                     :cross-section (m/difference triangle (m/offset triangle -1)))
-                              #_(frame :name :b :cross-section (m/offset triangle -1))
-                              (loft
-                               (up :angle (/ Math/PI 2) :curve-radius 20)
-                               (left :angle Math/PI :curve-radius 20)
-                               (forward :length 20)
-                               (right :angle Math/PI :curve-radius 20)
-                               (up :angle Math/PI :curve-radius 20)
-                               (forward :length 20)
-                               (left :angle Math/PI :curve-radius 20)
-                               (forward :length 20)
-                               (translate :z 70)
-                               (up :angle Math/PI :curve-radius 20)
-                               (forward :length 40)
-                               (for [_ (range 3)]
-                                 [(forward :length 20)
-                                  (down :angle (/ Math/PI 1) :curve-radius 4)
-                                  (forward :length 20)
-                                  (up :angle (/ Math/PI 1) :curve-radius 20)])))))
-                (m/get-mesh)))
-      (m/export-mesh "test.glb"))
-
-
-  (ns-extrusion
-   (def tmp-body (frame :name :a
-                        :cross-section (m/circle 20)
-                        :curve-radius 20))
-
-   (def tmp-mask (frame :name :b
-                        :cross-seciton (m/cricle 30)
-                        :curve-radius 30))
-   (forward :length 20)
-   (left :angle (/ Math/PI 2)))
-
-  (def tmp-ret (m/diference tmp-body tmp-mask))
-  )
+(defn export [model filename]
+  (m/export-mesh (m/get-mesh (impl/to-manifold model)) filename))

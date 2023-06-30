@@ -22,6 +22,9 @@
 (defn model? [x]
   (instance? plexus.impl.Model x))
 
+(defn extrusion? [x]
+  (instance? plexus.impl.Extrusion x))
+
 (defn to-model [frame]
   (let [manifolds (remove nil? (map :manifold (:segments frame)))
         manifold (if (pos? (count manifolds))
@@ -47,6 +50,7 @@
   (cond (frame? x) (-> x to-model project-model :manifold)
         (model? x) (-> x project-model :manifold)
         (m/manifold? x) x
+        (extrusion? x) (get (:models x) (:main-model x))
         :else (throw (IllegalArgumentException. (str "Argument must be Frame, Model or Manifold. Recieved: " (type x))))))
 
 (defn parse-hull [form]
@@ -67,7 +71,7 @@
      (case op
        (::union ::difference ::intersection)
        {:op op ::list (next form)}
-       ::hull (parse-hull form)
+       (::hull ::loft) (parse-hull form)
        (if (map? (second form))
          (let [op (first form)
                args (nnext form)
@@ -299,7 +303,7 @@
                                                                             all-transforms)]
                                                                    {:cross-section cross-section
                                                                     :frame tf}))
-                                                               (remove nil? loft-segments))))
+                                                               (remove nil? (filter :cross-section loft-segments)))))
                                                             true)
                                                   (meta ret-frame)))))))))
                    (:frames ret)
@@ -536,7 +540,8 @@
                insert-end-frame (-> extrusion :frames end-frame)
                end-transform (MatrixTransforms/CombineTransforms
                               (:frame-transform insert-end-frame)
-                              (:segment-transform insert-end-frame))]
+                              (:segment-transform insert-end-frame))
+               current-models (:models state)]
            (recur (update state :models merge
                           (reduce
                            (fn [models model-id]
@@ -545,7 +550,9 @@
                                    full-model-id (if ns
                                                    (keyword (name ns) (name model-id))
                                                    model-id)]
-                               (assoc models full-model-id model)))
+                               (if-let [current-model (get current-models full-model-id)]
+                                 (assoc models full-model-id (m/union current-model model))
+                                 (assoc models full-model-id model))))
                            extrusion-models
                            models))
                   forms
@@ -631,7 +638,13 @@
                                            :plexus.impl/intersection
                                            (m/intersection (map to-manifold (map eval-result args)))
 
-                                           (throw (Exception. (str "Unknown expr: " (vec expr) " ( " (type expr) " )")))))))
+                                           :plexus.impl/trim-by-plane
+                                           (let [ret (eval-result (first args))
+                                                 normal (:normal expr)
+                                                 origin-offset (or (:origin-offset expr) 0)]
+                                             (m/trim-by-plane ret normal origin-offset))
+
+                                           (throw (Exception. (str "Unknown expr: " expr " ( " (type expr) " )")))))))
                                    (:expr result-form))))
                          unioned-frames
                          (rseq result-forms))))))))
