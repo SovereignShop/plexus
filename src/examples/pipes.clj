@@ -2,9 +2,9 @@
   (:require
    [clj-manifold3d.core :as m]
    [plexus.core
-    :refer [result frame left right forward up down hull extrude set branch arc defmodel
-            rotate translate segment difference union intersection points export insert
-            loft trim-by-plane offset]]))
+    :refer [result frame left right forward up down hull extrude set branch
+            rotate translate segment difference union intersection points
+            export insert loft trim-by-plane offset]]))
 
 (-> (extrude
      (result :name :pipes
