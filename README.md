@@ -183,7 +183,7 @@ You can make any segment a gap with the gap parameter:
 
 Notice notice the extrude forms automatically flattened. You can arbitrarily nest loops.
 
-## Composition
+## Insert
 
 The easiest way to compose extrusions is with `insert`. 
 
@@ -194,9 +194,10 @@ The easiest way to compose extrusions is with `insert`.
             (forward :length 30))]
   (-> (extrude
        (result :name :pipes
-               :expr (trim-by-plane {:normal [-1 0 0]} (difference :pipe/outer :pipe/inner)))
+               :expr (->> (difference :pipe/outer :pipe/inner)
+                          (trim-by-plane :normal [-1 0 0])
+                          (translate :z 30)))
        (frame :name :origin)
-       (translate :z 5)
 
        (for [i (range 4)]
          (branch
@@ -206,10 +207,12 @@ The easiest way to compose extrusions is with `insert`.
                   :models [:outer :inner]
                   :ns :pipe
                   :end-frame :outer))))
-      (export "insert.glb")))
+      (export "insert.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2))))
 ```
 
 ![Segment Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/insert-example.png)
+
+Here we're insering the models `:outer` and `:inner` at four different locations. We're also namespacing the inserted models with `:pipe`. `:end-frame` specifies the frame to continue on in the next segment.
 
 ## Points
 
