@@ -1,27 +1,10 @@
 {:paths ["src/main" "resources"]
  :deps  {org.clojure/clojure {:mvn/version "1.11.0"}
          net.mikera/core.matrix {:mvn/version "0.62.0"}
-         ;; org.clojars.cartesiantheatrics/manifold3d {:mvn/version "1.0.8"}
-         org.cloja.cartesiantheatrics/clj-manifold3d {:local/root "../clj-manifold3d/"}
+         org.cloja.cartesiantheatrics/clj-manifold3d {:mvn/version "0.0.12"}
          camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
          metosin/malli {:mvn/version "0.11.0"}
          scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
- {:run-m   {:main-opts ["-m" "plexus.core"]}
-  :run-x   {:ns-default plexus.main
-            :exec-fn    greet
-            :exec-args  {:name "Clojure"}}
-  :test    {:extra-paths ["src/test"]
-            :extra-deps  {org.clojure/test.check {:mvn/version "1.1.0"}}}
-  :runner
-  {:extra-deps {io.github.cognitect-labs/test-runner
-                {:git/url "https://github.com/cognitect-labs/test-runner"
-                 :sha     "2d69f33d7980c3353b246c28f72ffeafbd9f2fab"}}
-   :exec-fn    cognitect.test-runner.api/test}
-  :uberjar {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.0.216"}}
-            :exec-fn      hf.depstar/uberjar
-            :exec-args    {:aot        true
-                           :jar        "plexus.jar"
-                           :main-class "plexus.core"
-                           :sync-pom   true}}}}
+ {:dev {org.clojars.cartesiantheatrics/manifold3d {:mvn/version "1.0.9"}}}}

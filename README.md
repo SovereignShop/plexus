@@ -141,6 +141,16 @@ vertices of each cross-section.
 
 ![Loft Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/loft-example.png)
 
+# Dependencies
+
+This library is built on top of ![java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. The bindings are packaged separately for each major platform. You'll need to include the correct native bindings for your platform.
+
+You'll also need have ![assimp](https://github.com/assimp/assimp) installed in your system. For ubuntu:
+
+``` sh
+sudo apt install libassimp-dev
+```
+
 ## Branching
 
 Branches work as you'd expect.
