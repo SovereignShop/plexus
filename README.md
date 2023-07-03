@@ -1,12 +1,12 @@
 # Plexus
 
-Plexus defines a simple, extensible language for defining polygons and extruding them in a piecewise fashion using egocentric reference frames.
+Plexus defines a simple tool for defining cross sections and extruding them in a piece-wise fashion using egocentric reference frames.
 
 You can specify 3D models by providing a series of extrusions to a set of cross sections, which are then composited using CSG operations.
 
 # Install
 
-This library uses ![java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers linux-TBB-x86_64/linux-OMP-x86_64. Using deps you can include bindings like so:
+This library uses [java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers linux-TBB-x86_64/linux-OMP-x86_64. Using deps you can include bindings like so:
 
 ``` clojure
 {:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.55"}}}
