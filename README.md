@@ -16,6 +16,12 @@ There are also bindings for Mac (currently only TBB) using the classifier `mac-T
 
 There are no windows jars available in a maven repository currently. See the github build artifacts for an experimental windows jar. The windows build unfortunately requires the dreaded `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE`
 
+You also need [assimp](https://github.com/assimp/assimp) available on you system.
+
+``` sh
+sudo apt install libassimp-dev
+```
+
 # Status
 
 Alpha, syntax and internals may change.
