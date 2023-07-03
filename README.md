@@ -6,9 +6,9 @@ You can specify 3D models by providing a series of extrusions to a set of cross 
 
 # Install
 
-This library uses [java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers linux-TBB-x86_64/linux-OMP-x86_64. Using deps you can include bindings like so:
+This library uses [java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers `linux-TBB-x86_64`/`linux-OMP-x86_64`. 
 
-``` clojure
+```clojure
 {:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.55"}}}
 ```
 
@@ -153,16 +153,6 @@ You can loft between a sequence of isomorphic cross-sections with `loft`. Edges 
 ```
 
 ![Loft Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/loft-example.png)
-
-# Dependencies
-
-This library is built on top of ![java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. The bindings are packaged separately for each major platform. You'll need to include the correct native bindings for your platform.
-
-You'll also need have ![assimp](https://github.com/assimp/assimp) installed in your system. For ubuntu:
-
-``` sh
-sudo apt install libassimp-dev
-```
 
 ## Branching
 
