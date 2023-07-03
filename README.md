@@ -36,8 +36,8 @@ outer and inner cross sections.
 (require
  '[clj-manifold3d.core :as m]
  '[plexus.core
-   :refer [result frame left right forward up down hull extrude set branch arc defmodel
-           rotate translate segment difference union intersection points export insert
+   :refer [result frame left right forward up down hull extrude set branch
+           rotate translate difference union intersection points export insert
            loft trim-by-plane offset]])
 
 (-> (extrude
@@ -80,7 +80,6 @@ transforming both cross sections with each segment:
      (forward :length 10 :to [:body :mask])
      (up :angle (/ Math/PI 2) :to [:body :mask]))
     (export "pipes.glb"))
-
 ```
 
 ![Pipe Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/pipe-example.png)
