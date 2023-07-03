@@ -1,6 +1,6 @@
 # Plexus
 
-Plexus defines a simple tool for defining cross sections and extruding them in a piece-wise fashion using egocentric reference frames.
+Plexus is a simple tool for defining cross sections and extruding them in a piece-wise fashion using egocentric reference frames.
 
 You can specify 3D models by providing a series of extrusions to a set of cross sections, which are then composited using CSG operations.
 
