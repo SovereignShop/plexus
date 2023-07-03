@@ -4,12 +4,22 @@ Plexus defines a simple, extensible language for defining polygons and extruding
 
 You can specify 3D models by providing a series of extrusions to a set of cross sections, which are then composited using CSG operations.
 
+# Install
 
+This library uses ![java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers linux-TBB-x86_64/linux-OMP-x86_64. Using deps you can include bindings like so:
+
+``` clojure
+{:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.55"}}}
+```
+
+There are also bindings for Mac (currently only TBB) using the classifier `mac-TBB-x86_64`.
+
+There are no windows jars available in a maven repository currently. See the github build artifacts for an experimental windows jar. The windows build unfortunately requires the dreaded `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE`
 
 # Status
 
-Pre-alpha, syntax and internals likely to change.
- 
+Alpha, syntax and internals may change.
+
 # Examples
 
 In the following example, our outer profile is a circle with radius of 6. The mask
@@ -93,8 +103,8 @@ This extrude is equivalent to the one above.
 
 ## Hulls
 
-Hulls are often a great way to transform between cross sections. Hulls in plexus
-are applied in a stack-like fashion to the previous two cross sections:
+Hulls are often a great way to transform between cross sections. You can wrap any sequence of extrusions
+in a hull form to make a convex hull out of those segments:
 
 ``` clojure
 (-> (extrude
@@ -118,12 +128,9 @@ are applied in a stack-like fashion to the previous two cross sections:
 
 ![Hull Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/hull-example.png)
 
-i.e. it pops the previous two segments off, hulls them, then pushes the result back onto the stack. You can specify the parameter `n-segments` if you'd like to hull between several segments.
-
 ## Lofts 
 
-You can loft between a sequence of isomorphic cross-sections with `loft`. Edges are constructed between corresponding
-vertices of each cross-section.
+You can loft between a sequence of isomorphic cross-sections with `loft`. Edges are constructed between corresponding vertices of each cross-section.
 
 ``` clojure
 (-> (extrude
@@ -174,7 +181,7 @@ Branches work as you'd expect.
 ![Branching Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/branching-example.png)
 
 
-The body of the branch is just another extrude. Notice the mask is not subtracted from the frame until the full tree is constructed.
+The body of the branch is just another extrude. The required ":from" property determines the starting coordinate frame of the branch.
 
 ## Gaps
 
