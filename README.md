@@ -12,6 +12,8 @@ This library uses [java bindings](https://github.com/SovereignShop/manifold) to 
 {:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.55"}}}
 ```
 
+Linux bindings with TBB and Cuda support are also available at classifier `linux-TBB-cuda-x86_64`. The library will fall back to CPU implementations if cuda is not found on the system. The cuda jar is much larger at about 15mb vs. 2mb for the plain TBB jar.
+
 There are also bindings for Mac (currently only TBB) using the classifier `mac-TBB-x86_64`.
 
 There are no windows jars available in a maven repository currently. See the github build artifacts for an experimental windows jar. The windows build unfortunately requires the dreaded `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE`
