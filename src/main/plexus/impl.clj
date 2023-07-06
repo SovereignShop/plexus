@@ -5,7 +5,6 @@
    [malli.core :as ma]
    [clj-manifold3d.core :as m]
    [plexus.triangles :as triangles]
-   [malli.core :as ma]
    [plexus.transforms :as tf]))
 
 (defrecord Extrusion [result-forms frames state angle-scalar forms transforms models])
@@ -578,16 +577,24 @@
         result-forms (:result-forms result)
         unioned-frames (merge (dissoc frames ::default-frame) (:models result))
         main-model-name (or (:name (first result-forms))
-                            (key (first (dissoc frames ::default-frame))))]
+                            (key (first (dissoc frames ::default-frame))))
+        model-cache (atom {})
+        to-manifold-cached (fn [x]
+                             (or (get @model-cache x)
+                                 (let [ret (to-manifold x)]
+                                   (swap! model-cache assoc x ret)
+                                   ret)))]
     (-> result
         (assoc :main-model main-model-name)
         (assoc :models
                (persistent!
                 (reduce-kv
                  (fn [ret k v]
-                   (if-let [manifold (to-manifold v)]
-                     (assoc! ret k manifold)
-                     ret))
+                   (if (m/manifold? v)
+                     (assoc! ret k v)
+                     (if-let [manifold (to-manifold v)]
+                        (assoc! ret k manifold)
+                        ret)))
                  (transient {})
                  (reduce (fn [result-frames result-form]
                            (assoc result-frames
@@ -600,7 +607,7 @@
                                        (let [args (normalize-segment (::list expr))]
                                          (case (:op expr)
                                            :plexus.impl/hull
-                                           (m/hull (map to-manifold (map eval-result args)))
+                                           (m/hull (map to-manifold-cached (map eval-result args)))
 
                                            :pleuxs.impl/mirror
                                            (let [ret (eval-result (first args))]
@@ -618,25 +625,24 @@
                                                    (m/manifold? ret) (m/translate ret tr)))
 
                                            :plexus.impl/rotate
-                                           (let [ret (eval-result (first args))
-                                                 rot [(* angle-scalar (or (:x expr) 0))
-                                                      (* angle-scalar (or (:y expr) 0))
-                                                      (* angle-scalar (or (:z expr) 0))]]
+                                           (let [ret (eval-result (first args))]
                                              (cond (or (frame? ret) (model? ret)) (update ret :frame-transform m/rotate
                                                                                           [(or (:x expr) 0)
                                                                                            (or (:y expr) 0)
                                                                                            (or (:z expr) 0)]                                    )
 
-                                                   (m/manifold? ret) (m/rotate ret rot)))
+                                                   (m/manifold? ret) (m/rotate ret [(* angle-scalar (or (:x expr) 0))
+                                                                                    (* angle-scalar (or (:y expr) 0))
+                                                                                    (* angle-scalar (or (:z expr) 0))])))
 
                                            :plexus.impl/union
-                                           (m/union (map to-manifold (map eval-result args)))
+                                           (m/union (map to-manifold-cached (map eval-result args)))
 
                                            :plexus.impl/difference
-                                           (m/difference (map to-manifold (map eval-result args)))
+                                           (m/difference (map to-manifold-cached (map eval-result args)))
 
                                            :plexus.impl/intersection
-                                           (m/intersection (map to-manifold (map eval-result args)))
+                                           (m/intersection (map to-manifold-cached (map eval-result args)))
 
                                            :plexus.impl/trim-by-plane
                                            (let [ret (eval-result (first args))
