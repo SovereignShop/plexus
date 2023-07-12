@@ -525,10 +525,17 @@
                   forms
                   (reduce
                    (fn [frames frame-id]
-                     (let [frame (get frames frame-id)]
+                     (let [frame (get frames frame-id)
+                           full-tf (MatrixTransforms/CombineTransforms
+                                    (:frame-transform frame)
+                                    (:segment-transform frame))]
                        (assoc frames
                               frame-id
-                              (assoc frame :end-transform replace))))
+                              (assoc frame
+                                     :segment-transform
+                                     (MatrixTransforms/CombineTransforms
+                                      (MatrixTransforms/InvertTransform full-tf)
+                                      replace)))))
                    frames
                    apply-to)
                   result-forms))
