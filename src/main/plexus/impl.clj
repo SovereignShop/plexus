@@ -159,18 +159,23 @@
          :plexus.impl/frame
          (let [frame-id (:name form)
                default-frame-id (:default-frame state)
+               _ default-frame-id
                default-frame (get frames default-frame-id)
-               frame-transform (MatrixTransforms/CombineTransforms
-                                (:frame-transform default-frame)
-                                (:segment-transform default-frame))
+               default-frame-transform (MatrixTransforms/CombineTransforms
+                                        (:frame-transform default-frame)
+                                        (:segment-transform default-frame))
                frame (with-meta
-                       (map->Frame (merge (if (contains? frames frame-id)
-                                            (assoc (get frames frame-id)
-                                                   :segment-transform (:segment-transform default-frame))
+                       (map->Frame (merge (if-let [frame (get frames frame-id)]
+                                            (assoc frame
+                                                   :segment-transform
+                                                   (MatrixTransforms/CombineTransforms
+                                                    (MatrixTransforms/InvertTransform
+                                                     (:frame-transform frame))
+                                                    default-frame-transform))
                                             (assoc default-frame
                                                    :segments []
                                                    :segment-transform (m/frame 1)
-                                                   :frame-transform frame-transform))
+                                                   :frame-transform default-frame-transform))
                                           (select-keys form [:name :cross-section :curve-radius])))
                        (or (:meta form) {}))]
            (recur (-> state
@@ -464,10 +469,11 @@
                   forms
                   (reduce-kv
                    (fn [ret frame-id branch-frame]
-                     (if (contains? ret frame-id)
+                     (if-let [frame (get ret frame-id)]
                        (assoc ret
                               frame-id
-                              (assoc (get ret frame-id) :segments (:segments branch-frame)))
+                              (assoc frame
+                                     :segments (:segments branch-frame)))
                        (assoc ret frame-id branch-frame)))
                    frames
                    (:frames branch-ret))

@@ -131,9 +131,6 @@
                    parsed-path)]
     (segment extrude*)))
 
-(defn mask [& args]
-  (validate-form `(:plexus.impl/model ~@(conj (vec args) :mask? true)) schema/model-schema))
-
 (defn frame [& args]
   (validate-form `(:plexus.impl/frame ~@args) schema/frame-schema))
 
@@ -143,14 +140,8 @@
 (defn offset [& args]
   (validate-form `(:plexus.impl/offset ~@args) schema/offset-schema))
 
-(defn minkowski [& args]
-  (validate-form `(:plexus.impl/minkowski ~@args) schema/any-map-schema))
-
 (defn add-ns [& args]
   (validate-form `(:plexus.impl/add-ns ~@args) schema/add-ns-schema))
-
-(defn ignore [& args]
-  (validate-form `(:plexus.impl/ignore ~@args) schema/any-map-schema))
 
 (defn result [& args]
   (validate-form `(:plexus.impl/result ~@args) schema/result-schema))
@@ -182,30 +173,6 @@
 (defn trim-by-plane [& args]
   (validate-form `(:plexus.impl/trim-by-plane ~@args) schema/any-map-schema))
 
-(defn pattern [& args]
-  (let [{:keys [from axis distances angles namespaces end-at :plexus.impl/list]} (impl/parse-args (list* :na args))]
-    (assert (or angles distances))
-    (apply segment
-           (sort-by #(= (first %) :plexus.impl/segment)
-                    (for [[angle distance namespace idx]
-                          (map vector
-                               (or angles (repeat 0))
-                               (or distances (repeat 0))
-                               (or namespaces (repeat nil))
-                               (range))]
-                      (if (and end-at (= end-at idx))
-                        (segment
-                         (rotate axis angle)
-                         (translate axis distance)
-                         (add-ns :namespace namespace)
-                         (segment list))
-                        (branch
-                         :from from
-                         (rotate axis angle)
-                         (translate axis distance)
-                         (add-ns :namespace namespace)
-                         (segment list))))))))
-
 (defn lookup-transform [extrusion key]
   (-> extrusion :transforms key))
 
@@ -219,12 +186,6 @@
 
 (defn extrude [& forms]
   (impl/extrude forms))
-
-(defn subtract [a & args])
-
-(defn intersect [a & args])
-
-(defn join [a & args])
 
 (defmacro points
   [& forms]
