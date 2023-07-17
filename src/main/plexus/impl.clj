@@ -161,16 +161,15 @@
                default-frame-id (:default-frame state)
                _ default-frame-id
                default-frame (get frames default-frame-id)
-               default-frame-transform (MatrixTransforms/CombineTransforms
+               default-frame-transform (m/compose-frames
                                         (:frame-transform default-frame)
                                         (:segment-transform default-frame))
                frame (with-meta
                        (map->Frame (merge (if-let [frame (get frames frame-id)]
                                             (assoc frame
                                                    :segment-transform
-                                                   (MatrixTransforms/CombineTransforms
-                                                    (MatrixTransforms/InvertTransform
-                                                     (:frame-transform frame))
+                                                   (m/compose-frames
+                                                    (m/invert-frame (:frame-transform frame))
                                                     default-frame-transform))
                                             (assoc default-frame
                                                    :segments []
@@ -511,7 +510,7 @@
                transform-name (cond->> name
                                 namespace (->keyword namespace))]
            (recur (update state :transforms assoc transform-name
-                          (MatrixTransforms/CombineTransforms
+                          (m/compose-frames
                            (:frame-transform frame)
                            (:segment-transform frame)))
                   forms
@@ -525,16 +524,13 @@
                   forms
                   (reduce
                    (fn [frames frame-id]
-                     (let [frame (get frames frame-id)
-                           full-tf (MatrixTransforms/CombineTransforms
-                                    (:frame-transform frame)
-                                    (:segment-transform frame))]
+                     (let [frame (get frames frame-id)]
                        (assoc frames
                               frame-id
                               (assoc frame
                                      :segment-transform
-                                     (MatrixTransforms/CombineTransforms
-                                      (MatrixTransforms/InvertTransform full-tf)
+                                     (m/compose-frames
+                                      (m/invert-frame (:frame-transform frame))
                                       replace)))))
                    frames
                    apply-to)
@@ -545,12 +541,12 @@
                default-frame-id (:default-frame state)
                at (or at default-frame-id)
                base-frame (get frames at)
-               base-frame-transform (MatrixTransforms/CombineTransforms
+               base-frame-transform (m/compose-frames
                                      (:frame-transform base-frame)
                                      (:segment-transform base-frame))
                extrusion-models (:models extrusion)
                insert-end-frame (-> extrusion :frames end-frame)
-               end-transform (MatrixTransforms/CombineTransforms
+               end-transform (m/compose-frames
                               (:frame-transform insert-end-frame)
                               (:segment-transform insert-end-frame))
                current-models (:models state)]
@@ -574,7 +570,7 @@
                        (assoc frames frame-id
                               (assoc frame
                                      :segment-transform
-                                     (MatrixTransforms/CombineTransforms
+                                     (m/compose-frames
                                       end-transform
                                       (:segment-transform frame))))))
                    frames
@@ -622,7 +618,7 @@
                                            :plexus.impl/hull
                                            (m/hull (map to-manifold-cached (map eval-result args)))
 
-                                           :pleuxs.impl/mirror
+                                           :plexus.impl/mirror
                                            (let [ret (eval-result (first args))]
                                              (cond (frame? ret) (update (to-model ret) :manifold m/mirror (:normal expr))
                                                    (model? ret) (update ret :manifold m/mirror (:normal expr))
