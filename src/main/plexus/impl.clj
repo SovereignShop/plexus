@@ -545,7 +545,9 @@
                                      (:frame-transform base-frame)
                                      (:segment-transform base-frame))
                extrusion-models (:models extrusion)
-               insert-end-frame (-> extrusion :frames end-frame)
+               insert-end-frame (if end-frame
+                                  (-> extrusion :frames end-frame)
+                                  base-frame)
                end-transform (m/compose-frames
                               (:frame-transform insert-end-frame)
                               (:segment-transform insert-end-frame))
@@ -562,7 +564,7 @@
                                  (assoc models full-model-id (m/union current-model model))
                                  (assoc models full-model-id model))))
                            extrusion-models
-                           models))
+                           (or models [(:main-model extrusion)])))
                   forms
                   (reduce
                    (fn [frames frame-id]
