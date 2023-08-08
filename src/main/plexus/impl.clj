@@ -552,31 +552,33 @@
                               (:frame-transform insert-end-frame)
                               (:segment-transform insert-end-frame))
                current-models (:models state)]
-           (recur (update state :models merge
-                          (reduce
-                           (fn [models model-id]
-                             (let [model (m/transform (get extrusion-models model-id)
-                                                      base-frame-transform)
-                                   full-model-id (if ns
-                                                   (keyword (name ns) (name model-id))
-                                                   model-id)]
-                               (if-let [current-model (get current-models full-model-id)]
-                                 (assoc models full-model-id (m/union current-model model))
-                                 (assoc models full-model-id model))))
-                           extrusion-models
-                           (or models [(:main-model extrusion)])))
+           (recur (update state :models into
+                          (map (fn [model-id]
+                                 (let [model (m/transform (get extrusion-models model-id)
+                                                          base-frame-transform)
+                                       full-model-id (if ns
+                                                       (keyword (name ns) (name model-id))
+                                                       model-id)]
+                                   [full-model-id
+                                    (if-let [current-model (get current-models full-model-id)]
+                                      (m/union current-model model)
+                                      model)]))
+                               (or models [(:main-model extrusion)])))
                   forms
-                  (reduce
-                   (fn [frames frame-id]
-                     (let [frame (get frames frame-id)]
-                       (assoc frames frame-id
-                              (assoc frame
-                                     :segment-transform
-                                     (m/compose-frames
-                                      end-transform
-                                      (:segment-transform frame))))))
-                   frames
-                   current-frame-ids)
+                  (if end-frame
+                    (reduce
+                     (fn [frames frame-id]
+                       (let [frame (get frames frame-id)]
+                         (assoc frames
+                                frame-id
+                                (assoc frame
+                                       :segment-transform
+                                       (m/compose-frames
+                                        end-transform
+                                        (:segment-transform frame))))))
+                     frames
+                     current-frame-ids)
+                    frames)
                   result-forms))
 
          (throw (Exception. (str "No matching clause for form: " form))))))))
@@ -592,9 +594,9 @@
         model-cache (atom {})
         to-manifold-cached (fn [x]
                              (or (get @model-cache x)
-                                 (let [ret (to-manifold x)]
-                                   (swap! model-cache assoc x ret)
-                                   ret)))]
+                                   (let [ret (to-manifold x)]
+                                     (swap! model-cache assoc x ret)
+                                     ret)))]
     (-> result
         (assoc :main-model main-model-name)
         (assoc :models
@@ -604,8 +606,8 @@
                    (if (m/manifold? v)
                      (assoc! ret k v)
                      (if-let [manifold (to-manifold v)]
-                        (assoc! ret k manifold)
-                        ret)))
+                       (assoc! ret k manifold)
+                       ret)))
                  (transient {})
                  (reduce (fn [result-frames result-form]
                            (assoc result-frames
