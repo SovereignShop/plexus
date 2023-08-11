@@ -13,8 +13,8 @@
   along the ego-centric x axis by negative `:curve-radians`.
 
   opts
-  :angle - number of radians to cufve.
-  :curve-radius - radius of the curve."
+  `:angle` - number of radians to cufve.
+  `:curve-radius` - radius of the curve."
   [& opts]
   (validate-form `(:plexus.impl/left ~@opts) schema/curve-schema))
 
@@ -23,8 +23,8 @@
   along the ego-centric x axis by `:curve-radians`.
 
   opts
-  :angle - number of radians to cufve.
-  :curve-radius - radius of the curve."
+  `:angle` - number of radians to cufve.
+  `:curve-radius` - radius of the curve."
   [& opts]
   (validate-form `(:plexus.impl/right ~@opts) schema/curve-schema))
 
@@ -33,8 +33,8 @@
   along the ego-centric y axis by negative `:curve-radians`.
 
   opts
-  :angle - number of radians to cufve.
-  :curve-radius - radius of the curve."
+  `:angle` - number of radians to cufve.
+  `:curve-radius` - radius of the curve."
   [& opts]
   (validate-form `(:plexus.impl/up ~@opts) schema/curve-schema))
 
@@ -43,8 +43,8 @@
   along the ego-centric x axis by `:curve-radians`.
 
   opts
-  :angle - number of radians to cufve.
-  :curve-radius - radius of the curve."
+  `:angle` - number of radians to cufve.
+  `:curve-radius` - radius of the curve."
   [& opts]
   (validate-form `(:plexus.impl/down ~@opts) schema/curve-schema))
 
@@ -57,7 +57,8 @@
   Rotates the current transform set by `:angle` radians about the z axis.
 
   opts
-  :angle - Radians of roll"
+
+  `:angle` - Radians of roll"
   [& opts]
   (validate-form `(:plexus.impl/roll ~@opts) schema/curve-schema))
 
@@ -66,18 +67,18 @@
 
   opts:
 
-  :forward - Extrude in cannonical direction (along z axis)
-  :x - extrude along x axis
-  :y - extrude along y axis
-  :z - extrude along z axis
-  :twist - Twist radians while extruding. End transform matches the degree of twist.
-  :center - (default: false) whether extrusion should be centered at starting transform frame.
-  :branch? - (default: false) whether extrusion should be applied in a branch without updating
-             the transform.
-  :n-steps - Number of steps in the extrusion.
-  :transform-step-fn - A function (fn [tf i] tf) that is applied to each step. Note, this does not
-                       currently effect extrusion but is usefull for generating vertices when using
-                       `points`. "
+  `:forward` - Extrude in cannonical direction (along z axis)
+  `:x` - extrude along x axis
+  `:y` - extrude along y axis
+  `:z` - extrude along z axis
+  `:twist` - Twist radians while extruding. End transform matches the degree of twist.
+  `:center` - (default: false) whether extrusion should be centered at starting transform frame.
+  `:branch?` - (default: false) whether extrusion should be applied in a branch without updating
+               the transform.
+  `:n-steps` - Number of steps in the extrusion.
+  `:transform-step-fn` - A function (fn [tf i] tf) that is applied to each step. Note, this does not
+                         currently effect extrusion but is usefull for generating vertices when using
+                        `points`. "
   [& opts]
   (validate-form `(:plexus.impl/forward ~@opts) schema/forward-schema))
 
@@ -87,84 +88,142 @@
   (validate-form `(:plexus.impl/backward ~@opts) schema/linear-extrude-schema))
 
 (defn loft
+  "Loft between segments. All lofted cross-sections must have equal number of points. Optional
+  `:to` parameter specifies which frames to loft."
   [& opts]
   (validate-form `(:plexus.impl/loft ~@opts) schema/any-map-schema))
 
 (defn hull
+  "Makes a convex hull out of wrapped segments. Optional `:to` parameter specifies which
+  frames to loft."
   [& opts]
   (validate-form `(:plexus.impl/hull ~@opts) schema/any-map-schema))
 
 (defn model [& args]
   (validate-form `(:plexus.impl/model ~@args) schema/model-schema))
 
-(defn translate [& args]
+(defn translate
+  "Translate frame. Takes `:x`, `:y`, and/or `:z` parameters and applies the translation
+  relative to the frame transform. If :global is set, axis values set relative to global origin."
+  [& args]
   (validate-form `(:plexus.impl/translate ~@args) schema/translate-schema))
 
-(defn mirror [& args]
+(defn mirror
+  "Only applies to result expressions. Required :normal parameter specifies
+  the mirror plane."
+  [& args]
   (validate-form `(:plexus.impl/mirror ~@args) schema/mirror-schema))
 
-(defn rotate [& args]
+(defn rotate
+  "Rotates around `:x`, `:y`, and/or `:z` axes relative to the current frame(s) transformation."
+  [& args]
   (validate-form `(:plexus.impl/rotate ~@args) schema/rotate-schema))
 
-(defn transform [& args]
+(defn transform
+  "Currently only supports `:replace` parameter, which replaces the current frames transformation."
+  [& args]
   (validate-form `(:plexus.impl/transform ~@args) schema/transform-schema))
 
-(defn spin [& args]
+(defn spin
+  "extrude by spinning in place."
+  [& args]
   (validate-form `(:plexus.impl/spin ~@args) schema/any-map-schema))
 
-(defn set [& args]
+(defn set
+  "Set default args for active frames, or explicity with the `:to [:frame1 :frame2 ...]` parameter."
+  [& args]
   (validate-form `(:plexus.impl/set ~@args) schema/any-map-schema))
 
-(defn set-meta [& args]
+(defn set-meta
+  "Set meta-data on the current frame. Segments inherent metadata from the frame they are associated with."
+  [& args]
   (validate-form `(:plexus.impl/set-meta ~@args) schema/any-map-schema))
 
-(defn branch [& args]
+(defn branch
+  "Branch off from a frames current transform. Required :from parameter specifies which frame to branch off from.
+  The body of the branch is the same as (extrude ...)."
+  [& args]
   (validate-form `(:plexus.impl/branch ~@args) schema/branch-schema))
 
-(defn segment [& args]
+(defn segment
+  [& args]
   (validate-form `(:plexus.impl/segment ~@args) schema/any-map-schema))
 
-(defn to [& p]
+(defn to
+  "Body is applied only to frames specified in the required `:models [:frame ...]` paramter"
+  [& p]
   (let [[opts parsed-path] (impl/parse-path p)
         extrude* (map (fn [form]
                         (assoc form :to (:models opts)))
-                   parsed-path)]
+                      parsed-path)]
     (segment extrude*)))
+
+(defn mask [& args]
+  (validate-form `(:plexus.impl/model ~@(conj (vec args) :mask? true)) schema/model-schema))
 
 (defn frame [& args]
   (validate-form `(:plexus.impl/frame ~@args) schema/frame-schema))
 
-(defn save-transform [& args]
+(defn save-transform
+  "Save transform by name."
+  [& args]
   (validate-form `(:plexus.impl/save-transform ~@args) schema/save-transform-schema))
 
 (defn offset [& args]
   (validate-form `(:plexus.impl/offset ~@args) schema/offset-schema))
 
+(defn minkowski [& args]
+  (validate-form `(:plexus.impl/minkowski ~@args) schema/any-map-schema))
+
 (defn add-ns [& args]
   (validate-form `(:plexus.impl/add-ns ~@args) schema/add-ns-schema))
 
-(defn result [& args]
+(defn ignore [& args]
+  (validate-form `(:plexus.impl/ignore ~@args) schema/any-map-schema))
+
+(defn result
+  "Combines frames together with CSG and other 3D geometric operations. Supports operations
+  `union`, `difference`, `intersection`, `translate`, `rotate`, `mirror`, `loft`, `hull`,
+   and `trim-by-plane`. Frames in result trees are specified by name. Results can also include
+   other results (also by name).
+
+  opts
+
+  :name - name of the result.
+  :expr - Tree of SCG and other 3D geometric operations."
+  [& args]
   (validate-form `(:plexus.impl/result ~@args) schema/result-schema))
 
-(defn union [& args]
+(defn union
+  "For use in result expressions. Unions frames."
+  [& args]
   (validate-form `(:plexus.impl/union ~@args) schema/result-op-schema))
 
-(defn intersection [& args]
+(defn intersection
+  "For use in result expressions. Intersects frames."
+  [& args]
   (validate-form `(:plexus.impl/intersection ~@args) schema/result-op-schema))
 
-(defn difference [& args]
+(defn difference
+  "For use in result expressions. Subtracts frames."
+  [& args]
   (validate-form `(:plexus.impl/difference ~@args) schema/result-op-schema))
 
 (defn slice [& args]
   (validate-form `(:plexus.impl/slice ~@args) [:map [:length number?]]))
 
-(defn iso-hull [& args]
-  (validate-form `(:plexus.impl/iso-hull ~@args) schema/hull-schema))
-
-(defn import [& args]
+#_(defn import [& args]
   (validate-form `(:plexus.impl/import ~@args) schema/import-schema))
 
-(defn insert [& args]
+(defn insert
+  "insert an extrusion at the current position and orientation.
+
+  opts
+  `:extrusion` - extrusion to insert.
+  `:models` (optional) - models to inserts. Can include results and/or frames. Defaults to singleton vector of last result model.
+  `:ns` (optional) - an optional namespace ot associate with inserted models.
+  `:end-frame` (optional) - name of a inserted the next segment is relative to. The frame must be defined in the provided extrusion."
+  [& args]
   (validate-form `(:plexus.impl/insert ~@args) schema/any-map-schema))
 
 (defn show-coordinate-frame [& args]
@@ -173,7 +232,33 @@
 (defn trim-by-plane [& args]
   (validate-form `(:plexus.impl/trim-by-plane ~@args) schema/any-map-schema))
 
-(defn lookup-transform [extrusion key]
+(defn pattern [& args]
+  (let [{:keys [from axis distances angles namespaces end-at :plexus.impl/list]} (impl/parse-args (list* :na args))]
+    (assert (or angles distances))
+    (apply segment
+           (sort-by #(= (first %) :plexus.impl/segment)
+                    (for [[angle distance namespace idx]
+                          (map vector
+                               (or angles (repeat 0))
+                               (or distances (repeat 0))
+                               (or namespaces (repeat nil))
+                               (range))]
+                      (if (and end-at (= end-at idx))
+                        (segment
+                         (rotate axis angle)
+                         (translate axis distance)
+                         (add-ns :namespace namespace)
+                         (segment list))
+                        (branch
+                         :from from
+                         (rotate axis angle)
+                         (translate axis distance)
+                         (add-ns :namespace namespace)
+                         (segment list))))))))
+
+(defn lookup-transform
+  "lookup saved transform by name. See `save-transform`."
+  [extrusion key]
   (-> extrusion :transforms key))
 
 (defn get-frame [extrusion name]
@@ -186,6 +271,12 @@
 
 (defn extrude [& forms]
   (impl/extrude forms))
+
+(defn subtract [a & args])
+
+(defn intersect [a & args])
+
+(defn join [a & args])
 
 (defmacro points
   [& forms]
@@ -219,7 +310,7 @@
              m @x]
          (if (m/manifold? m)
            (m/export-mesh (m/get-mesh (cond-> m (= file-ext "3ds") (m/rotate [-90 0 0]))) (format "out/%s/%s" file-ext filename))
-           (let [manifold (cond-> (get (:models m) (:main-model m))
+           (let [manifold (cond-> (get (:frames m) (:main-frame m))
                             (#{"3ds"} file-ext) (m/rotate [-90 0 0]))]
              (m/export-mesh (m/get-mesh manifold) (format "out/%s/%s" file-ext filename)))))))))
 
