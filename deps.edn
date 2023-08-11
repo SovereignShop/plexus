@@ -1,10 +1,18 @@
 {:paths ["src/main" "resources"]
- :deps  {org.clojure/clojure {:mvn/version "1.11.0"}
-         net.mikera/core.matrix {:mvn/version "0.62.0"}
-         org.clojars.cartesiantheatrics/clj-manifold3d {:mvn/version "0.0.12"}
+ :deps  {net.mikera/core.matrix {:mvn/version "0.62.0"}
+         ;; org.clojars.cartesiantheatrics/clj-manifold3d {:local/root "../clj-manifold3d"}
+         org.clojars.cartesiantheatrics/clj-manifold3d {:mvn/version "0.0.13"}
+         ;; org.clojars.cartesiantheatrics/manifold3d$linux-cuda-x86_64 {:mvn/version "1.0.64"}
          camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
          net.mikera/vectorz-clj {:mvn/version "0.48.0"}
          metosin/malli {:mvn/version "0.11.0"}
          scad-clj/scad-clj {:mvn/version "0.5.3"}}
  :aliases
- {:dev {org.clojars.cartesiantheatrics/manifold3d {:mvn/version "1.0.9"}}}}
+ {:dev
+  {:extra-deps
+   {org.clojars.cartesiantheatrics/manifold3d$linux-cuda-x86_64 {:mvn/version "1.0.64"}}}
+
+  :deploy
+  {:extra-paths ["build"]
+   :extra-deps {badigeon/badigeon {:mvn/version "1.7"}
+                org.clojure/clojure {:mvn/version "1.11.1"}}}}}
