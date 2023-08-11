@@ -1,3 +1,5 @@
+[![Clojars Project](https://img.shields.io/clojars/v/org.clojars.cartesiantheatrics/plexus.svg)](https://clojars.org/org.clojars.cartesiantheatrics/plexus)
+
 # Plexus
 
 Plexus is a simple tool for defining cross sections and extruding them in a piece-wise fashion using egocentric reference frames.

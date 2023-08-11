@@ -12,12 +12,11 @@
   (let [deps-data (deps/slurp-deps (io/file "deps.edn"))
         deps    (merge (:deps deps-data)
                        (-> deps-data :aliases :clj-prod :extra-deps))
-        version (str (s/trim (with-out-str
-                               (exec/exec "git" {:proc-args ["describe" "--tags"]
-                                                 ;; The error message of the exception thrown upon error.
-                                                 :error-msg "Failed to get tags"})))
-                     "")]
-    (assert (re-find #"^\d.\d.\d.$" version))
+        version (s/trim (with-out-str
+                                (exec/exec "git" {:proc-args ["describe" "--tags"]
+                                                  ;; The error message of the exception thrown upon error.
+                                                  :error-msg "Failed to get tags"})))]
+    (assert (re-find #"\d\.\d\.\d$" version))
     (jar/jar 'org.clojars.cartesiantheatrics/plexus {:mvn/version version}
              {:out-path                (format "target/plexus-%s.jar" version)
               :paths                   ["src/clj" "src/cljc"]
@@ -36,5 +35,5 @@
                      {:url "https://repo.clojars.org/"
                       :id "clojars"}))))
 
-#_(defn -main [& args]
+(defn -main [& args]
   (deploy-lib) )
