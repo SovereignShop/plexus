@@ -155,6 +155,34 @@
                   :end-frame :outer))))
       (export "insert.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2))))
 
+;; Translate
+
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :name :body :cross-section (m/circle 6))
+     (frame :name :mask :cross-section (m/circle 4))
+
+     (forward :length 10)
+     (translate :x 5 :z 10)
+     (forward :length 10))
+    (export "translate.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2)))
+
+;; Rotate
+
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :name :body :cross-section (m/circle 6))
+     (frame :name :mask :cross-section (m/circle 4))
+
+     (forward :length 15)
+     (rotate :x (/ Math/PI 2))
+     (forward :length 15))
+    (export "rotate.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2)))
+
 ;; Points
 
 (-> (m/cross-section

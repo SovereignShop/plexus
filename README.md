@@ -224,9 +224,53 @@ The easiest way to compose extrusions is with `insert`.
       (export "insert.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2))))
 ```
 
-![Segment Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/insert-example.png)
+![Insert Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/insert-example.png)
 
-Here we're insering the models `:outer` and `:inner` at four different locations. We're also namespacing the inserted models with `:pipe`. `:end-frame` specifies the frame to continue on in the next segment.
+Here we're inserting the models `:outer` and `:inner` at four different locations. We're also namespacing the inserted models with `:pipe`. `:end-frame` specifies the frame to continue on in the next segment.
+
+## Translate 
+
+You can "move" without extruding using `translate`.
+
+``` clojure
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :name :body :cross-section (m/circle 6))
+     (frame :name :mask :cross-section (m/circle 4))
+
+     (forward :length 10)
+     (translate :x 5 :z 10)
+     (forward :length 10))
+    (export "translate.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2)))
+```
+
+![Translate Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/translate-example.png)
+
+## Rotate 
+
+You can rotate in place without extruding using `rotate`.
+
+``` clojure
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :name :body :cross-section (m/circle 6))
+     (frame :name :mask :cross-section (m/circle 4))
+
+     (forward :length 15)
+     (rotate :x (/ Math/PI 2))
+     (forward :length 15))
+    (export "rotate.glb" (m/material :color [0 0.7 0.7 1.0] :metalness 0.2)))
+```
+
+![Rotate Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/rotate-example.png)
+
+## Result
+
+Result expressions have been demonstrated in every example so far. As you can see, they represent an arbitrarily nested CSG expression. Result expressions can reference other results by name. the set of operations that can be appear in result expressions are: `union`, `difference`, `intersection`, `hull`, `translate`, `rotate`, `mirror`, and `trim-by-plane`.
 
 ## Points
 

@@ -165,21 +165,35 @@
   (validate-form `(:plexus.impl/frame ~@args) schema/frame-schema))
 
 (defn save-transform
-  "Save transform by name."
+  "Save transform by name.
+
+  opts
+
+  `:frame` - The frame to save the current transform of.
+  `:name` - Name of the saved transform."
   [& args]
   (validate-form `(:plexus.impl/save-transform ~@args) schema/save-transform-schema))
 
-(defn offset [& args]
+(defn offset
+  "offset cross-sections.
+
+  opts
+
+  `:deta` - number of mm to offset, positive or negative.
+  `:join-type` - Type of corners to create when offsetting. Options are :square, :round, or :miter.
+  `:simplify` - Remove vertices from resulting contours in cross-section that are less than the
+                specified distance epsilon from an imaginary line that passes through its two adjacent vertices."
+  [& args]
   (validate-form `(:plexus.impl/offset ~@args) schema/offset-schema))
 
-(defn minkowski [& args]
-  (validate-form `(:plexus.impl/minkowski ~@args) schema/any-map-schema))
+(defn add-ns
+  "Namespace frames. If a namespace already exists, it will be be extended (period separated).
 
-(defn add-ns [& args]
+  opts
+
+  `:namespace` - string or keyword."
+  [& args]
   (validate-form `(:plexus.impl/add-ns ~@args) schema/add-ns-schema))
-
-(defn ignore [& args]
-  (validate-form `(:plexus.impl/ignore ~@args) schema/any-map-schema))
 
 (defn result
   "Combines frames together with CSG and other 3D geometric operations. Supports operations
@@ -209,7 +223,10 @@
   [& args]
   (validate-form `(:plexus.impl/difference ~@args) schema/result-op-schema))
 
-(defn slice [& args]
+#_(defn slice
+  "extrudes the end slice of the frames according to the normal defined by the z-axis. Useful
+  for hulls and lofts."
+  [& args]
   (validate-form `(:plexus.impl/slice ~@args) [:map [:length number?]]))
 
 #_(defn import [& args]
@@ -219,6 +236,7 @@
   "insert an extrusion at the current position and orientation.
 
   opts
+
   `:extrusion` - extrusion to insert.
   `:models` (optional) - models to inserts. Can include results and/or frames. Defaults to singleton vector of last result model.
   `:ns` (optional) - an optional namespace ot associate with inserted models.
@@ -226,10 +244,17 @@
   [& args]
   (validate-form `(:plexus.impl/insert ~@args) schema/any-map-schema))
 
-(defn show-coordinate-frame [& args]
+#_(defn show-coordinate-frame [& args]
   (validate-form `(:plexus.impl/show-coordinate-frame ~@args) schema/show-coordinate-frames-schema))
 
-(defn trim-by-plane [& args]
+(defn trim-by-plane
+  "For use in result expressions. Trims a model by subracting the halfspace defined by the `:normal`.
+
+  :opts
+
+  `:normal` - [x y z] defines the normal to the plane, points in the direction of the subtracted halfspace.
+  `:origin-offset` - Offset of the normal from [0 0 0] in the direction of the normal."
+  [& args]
   (validate-form `(:plexus.impl/trim-by-plane ~@args) schema/any-map-schema))
 
 (defn pattern [& args]
@@ -261,24 +286,24 @@
   [extrusion key]
   (-> extrusion :transforms key))
 
-(defn get-frame [extrusion name]
+(defn get-frame
+  "Get frame from `extrusion` by `name`"
+  [extrusion name]
   (-> extrusion :frames name))
 
-(defn get-model [extrusion name]
+(defn get-model
+  "Get model from `extrusion` by `name`. Models are composited frames. For every frame, a model
+  is created by unioning the segments. Also, every result expression yields a model."
+  [extrusion name]
   (-> extrusion :models name))
 
-(defn lookup-property [])
-
-(defn extrude [& forms]
+(defn extrude
+  "the main entry point. Takes a sequence of extrusion forms. Forms are automatically flattened."
+  [& forms]
   (impl/extrude forms))
 
-(defn subtract [a & args])
-
-(defn intersect [a & args])
-
-(defn join [a & args])
-
 (defmacro points
+  "Similar to extrude "
   [& forms]
   (let [[opts forms*] (impl/parse-path forms)
         axes (or (:axes opts) [:x :y])
