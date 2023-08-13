@@ -36,8 +36,8 @@ Alpha, syntax and internals may change.
 
 # Examples
 
-In the following example, our outer profile is a circle with radius of 6. The mask
-profile is a circle of radius 4. We then specify a series of egocentric transformations to the
+In the following example, our outer cross section is a circle with radius of 6. The mask
+cross section is a circle of radius 4. We then specify a series of egocentric transformations to the
 outer and inner cross sections. 
 
 ``` clojure
@@ -70,7 +70,7 @@ outer and inner cross sections.
     (export "test.glb"))
 ```
 
-Obviously there is a lot of code duplication here. After providing the profile for the inner and outer forms,
+Obviously there is a lot of code duplication here. After providing the cross section for the inner and outer forms,
 the transformations we apply to each are equivalent. We can get rid of that duplication by only providing one 
 transforming both cross sections with each segment:
 

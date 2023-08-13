@@ -19,7 +19,7 @@
     (assert (re-find #"\d\.\d\.\d$" version))
     (jar/jar 'org.clojars.cartesiantheatrics/plexus {:mvn/version version}
              {:out-path                (format "target/plexus-%s.jar" version)
-              :paths                   ["src/clj" "src/cljc"]
+              :paths                   ["src/main"]
               :deps                    deps
               :mvn/repos               '{"clojars" {:url "https://repo.clojars.org/"}}
               :exclusion-predicate     jar/default-exclusion-predicate
