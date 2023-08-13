@@ -335,7 +335,7 @@
              m @x]
          (if (m/manifold? m)
            (m/export-mesh (m/get-mesh (cond-> m (= file-ext "3ds") (m/rotate [-90 0 0]))) (format "out/%s/%s" file-ext filename))
-           (let [manifold (cond-> (get (:frames m) (:main-frame m))
+           (let [manifold (cond-> (get (:models m) (:main-model m))
                             (#{"3ds"} file-ext) (m/rotate [-90 0 0]))]
              (m/export-mesh (m/get-mesh manifold) (format "out/%s/%s" file-ext filename)))))))))
 
