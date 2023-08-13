@@ -109,6 +109,24 @@
      (branch :from :body (right :angle pi|2) (left :angle pi|2) (forward :length 20)))
     (export "branch.glb" (m/material :color [0. 0.7 0.7 1.0] :metalness 0.2)))
 
+
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 10)
+
+     (branch :from :body (left :angle pi|2) (right :angle pi|2) (forward :length 20))
+     (branch
+      :from :body
+      :with [:body]
+      (right :angle pi|2)
+      (left :angle pi|2)
+      (forward :length 20)))
+    (export "branch-with.glb" (m/material :color [0. 0.7 0.7 1.0] :metalness 0.2)))
+
 ;; Gaps
 
 (-> (extrude
@@ -117,6 +135,16 @@
        [(left :angle (/ Math/PI 2) :gap true)
         (right :angle (/ Math/PI 2))]))
     (export "gaps.glb" (m/material :color [0 0.7 0.7 0] :metalness 0.2)))
+
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+     (frame :cross-section (m/circle 6) :name :body :curve-radius 10)
+     (frame :cross-section (m/circle 4) :name :mask :curve-radius 10)
+     (for [_ (range 3)]
+       [(left :angle (/ Math/PI 2) :gap [:mask])
+        (right :angle (/ Math/PI 2))]))
+    (export "gaps-vector.glb" (m/material :color [0 0.7 0.7 0] :metalness 0.2)))
 
 ;; Segment
 

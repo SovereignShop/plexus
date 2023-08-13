@@ -8,15 +8,19 @@ You can specify 3D models by providing a series of extrusions to a set of cross 
 
 # Install
 
-This library uses [java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. There are TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers `linux-TBB-x86_64`/`linux-OMP-x86_64`. 
+This library uses [java bindings](https://github.com/SovereignShop/manifold) to the native library Manifold. You need to include the correct bindings for your platform. For linux, I recommend using `linux-x86_64` or `linux-cuda-x86_64` classifiers. For example:
 
 ```clojure
-{:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.55"}}}
+{:deps {org.clojars.cartesiantheatrics/manifold3d$linux-cuda-x86_64 {:mvn/version "1.0.64"}}}
 ```
 
-Linux bindings with TBB and Cuda support are also available at classifier `linux-TBB-cuda-x86_64`. The library will fall back to CPU implementations if cuda is not found on the system. The cuda jar is much larger at about 15mb vs. 2mb for the plain TBB jar.
+The library will fall back to CPU implementations if cuda is not found on the system, but the cuda jar is much larger at about 15mb vs. 2mb. There are experimental TBB (Threading Building Blocks) and OMP (OpenMP) flavors for the linux bindings using classifiers `linux-TBB-x86_64`/`linux-OMP-x86_64`. 
 
-There are also bindings for Mac (currently only TBB) using the classifier `mac-TBB-x86_64`.
+```clojure
+{:deps {org.clojars.cartesiantheatrics/manifold3d$linux-TBB-x86_64 {:mvn/version "1.0.64"}}}
+```
+
+There are also bindings for Mac (currently only TBB) using the classifiers `mac-x86_64` or `mac-TBB-x86_64`.
 
 There are no windows jars available in a maven repository currently. See the github build artifacts for an experimental windows jar. The windows build unfortunately requires the dreaded `CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=TRUE`
 
@@ -90,7 +94,7 @@ transforming both cross sections with each segment:
 
 
 This is equivalent to the one above, but we can still see there is a lot of duplication. The `:to [:outer :inner]` is repeated in each segment.
-We can elide this, as by default each segement will reply to every frame you have defined:
+We can elide this, as by default each segment will reply to every frame you have defined:
 
 ``` clojure
 (-> (extrude
@@ -137,7 +141,7 @@ in a hull form to make a convex hull out of those segments:
 
 ![Hull Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/hull-example.png)
 
-## Lofts 
+## Lofts
 
 You can loft between a sequence of isomorphic cross-sections with `loft`. Edges are constructed between corresponding vertices of each cross-section.
 
@@ -179,12 +183,34 @@ Branches work as you'd expect.
 
 ![Branching Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/branching-example.png)
 
+The body of the branch is just another extrude. The required ":from" property determines the starting coordinate frame of the branch. There's also an optional `:with` parameter that specifies which frames to include in the branch.
 
-The body of the branch is just another extrude. The required ":from" property determines the starting coordinate frame of the branch.
+``` clojure
+(-> (extrude
+     (result :name :pipes
+             :expr (difference :body :mask))
+
+     (frame :cross-section (m/circle 6) :name :body)
+     (frame :cross-section (m/circle 4) :name :mask)
+     (set :curve-radius 10)
+
+     (branch :from :body (left :angle pi|2) (right :angle pi|2) (forward :length 20))
+     (branch
+      :from :body
+      :with [:body]
+      (right :angle pi|2)
+      (left :angle pi|2)
+      (forward :length 20)))
+    (export "branch-with.glb" (m/material :color [0. 0.7 0.7 1.0] :metalness 0.2)))
+```
+
+![Branching Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/branching-with-example.png)
+
+Note that you can introduce new frames at any point. The starting transform of any new frame is inherited from the previously introduced frame.
 
 ## Gaps
 
-You can make any segment a gap with the gap parameter:
+You can make any segment a gap with the `:gap` parameter:
 
 ``` clojure
 (-> (extrude
@@ -197,7 +223,18 @@ You can make any segment a gap with the gap parameter:
 
 ![Gap Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/gap-example.png)
 
-Notice notice the extrude forms automatically flattened. You can arbitrarily nest loops.
+You can also specify which subset of active frames should be a gap by supplying a vector frame names.
+
+``` clojure
+(-> (extrude
+     (frame :cross-section (m/circle 6) :name :body :curve-radius 10)
+     (for [i (range 3)]
+       [(left :angle (/ Math/PI 2) :gap [:body])
+        (right :angle (/ Math/PI 2))]))
+    (export "gaps.glb"))
+```
+
+This is equivalent to above. `:gap true` is equivalent to gapping all active frames.
 
 ## Insert
 
@@ -290,3 +327,13 @@ Result expressions have been demonstrated in every example so far. As you can se
 ```
 
 ![Points Example](https://github.com/SovereignShop/plexus/blob/main/resources/images/points-example.png)
+
+## Using Extrusions
+
+You can access extrusion models using `get-model`.
+
+``` clojure
+(m/difference (get-model extrusion :body) 
+              (get-model extrusion :mask))
+```
+
