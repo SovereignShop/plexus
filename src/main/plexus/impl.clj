@@ -185,7 +185,8 @@
                   result-forms))
 
          :plexus.impl/forward
-         (let [{:keys [length x y z z to n-steps transform-step-fn twist props gap center branch?]
+         (let [{:keys [length x y z z to n-steps transform-step-fn
+                       twist props gap center branch? model]
                 :or {transform-step-fn (fn [tf i] tf)}} form
                axis (cond x :x y :y :else :z)
                length (or length x y z)
@@ -211,15 +212,17 @@
                                     frame (vary-meta frame merge props)
                                     is-gap (or (true? gap)
                                                (and (sequential? gap) (contains? (set gap) frame-id)))
-                                    cross-section (and (not is-gap) (:cross-section frame))]
+                                    cross-section (and (not is-gap) (:cross-section frame))
+                                    extrusion (or model (when cross-section
+                                                          (m/extrude cross-section length)))]
                                 (-> frame
                                     (assoc :segment-transform end-transform)
                                     (update :segments
                                             conj
                                             (with-meta
                                               (Segment. start-transform end-transform all-transforms cross-section
-                                                        (when cross-section
-                                                          (m/transform (m/extrude cross-section length) start-transform))
+                                                        (when extrusion
+                                                          (m/transform extrusion start-transform))
                                                         true)
                                               (meta frame))))))))
                    frames
