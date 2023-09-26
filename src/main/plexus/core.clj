@@ -343,4 +343,4 @@
   ([model filename]
    (export model filename (m/material)))
   ([model filename material]
-   (m/export-mesh (m/get-mesh (impl/to-manifold model)) filename :material material)))
+   (m/export-mesh (m/get-mesh (impl/to-manifold (cond-> model (m/cross-section? model) (m/extrude 1/2)))) filename :material material)))

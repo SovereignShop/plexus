@@ -108,7 +108,7 @@ We can elide this, as by default each segment will reply to every frame you have
      (left :angle (/ Math/PI 2))
      (right :angle (/ Math/PI 2))
      (forward :length 10)
-     (up :angle (/ Math/PI 2) :to [:body :mask]))
+     (up :angle (/ Math/PI 2)))
     (export "pipes.glb"))
 ```
 
