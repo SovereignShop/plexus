@@ -21,7 +21,9 @@
 (defn model? [x]
   (instance? plexus.impl.Model x))
 
-(defn extrusion? [x]
+(defn extrusion?
+  "True if `x` is an extrusion."
+  [x]
   (instance? plexus.impl.Extrusion x))
 
 (defn to-model [frame]

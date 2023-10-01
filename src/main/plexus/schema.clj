@@ -27,7 +27,8 @@
 (def frame-schema
   [:map
    [:name [:or keyword? string?]]
-   [:cross-section {:optional true} :cross-section]])
+   [:cross-section {:optional true} :cross-section]
+   [:cs {:optional true} int?]])
 
 (def any-map-schema
   [:map])

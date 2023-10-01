@@ -147,8 +147,13 @@
   schema/any-map-schema)
 
 (defop branch
-  "Branch off from a frames current transform. Required :from parameter specifies which frame to branch off from.
-  The body of the branch is the same as (extrude ...)."
+  "Branch off from a frames current transform.
+
+  opts:
+ `:from` (required) parameter specifies which frame to branch off from.
+         The body of the branch is the same as (extrude ...).
+  `:with` (optional) Specifies what subset of current frames to include in the
+          branch context."
   schema/branch-schema)
 
 (defn to
@@ -161,8 +166,21 @@
     [extrude*]))
 
 (defop frame
-  "Create a frame"
+  "Add a new frame to the current context.
+
+   opts
+   `:name` (required) A keyword or string naming the frame.
+   `:cross-section` (optional) Cross-section to associate with the
+                     current frame.
+
+   Options that specify default values to for future extrusion segments applied to this frame:
+
+   `:cs` (optional) specifies the default number of circular segments to each
+         curved extrusion.
+   `:curve-radius` (optional) Default curve-radius of future segments applied to this frame."
   schema/frame-schema)
+
+(frame   )
 
 (defop save-transform
   "Save transform by name.
@@ -263,6 +281,10 @@
   "the main entry point. Takes a sequence of extrusion forms. Forms are automatically flattened."
   [& forms]
   (impl/extrude forms))
+
+(def ^{:doc (-> #'plexus.impl/extrusion? meta :doc) :arglists '([x])} extrusion? impl/extrusion?)
+(def ^{:doc (-> #'plexus.impl/model? meta :doc) :arglists '([x])} model? impl/model?)
+(def ^{:doc (-> #'plexus.impl/frame? meta :doc) :arglists '([x])} frame? impl/frame?)
 
 (defmacro points
   "Similar to extrude "
