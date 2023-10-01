@@ -180,8 +180,6 @@
    `:curve-radius` (optional) Default curve-radius of future segments applied to this frame."
   schema/frame-schema)
 
-(frame   )
-
 (defop save-transform
   "Save transform by name.
 
