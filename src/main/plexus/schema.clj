@@ -5,9 +5,9 @@
    [clj-manifold3d.core :as m]))
 
 (def curve-schema
-  (ma/schema [:map
-              [:angle {:optional true} number?]
-              [:curve-radius {:optional true} number?]]))
+  [:map
+   [:angle {:optional true} number?]
+   [:curve-radius {:optional true} number?]])
 
 (def linear-extrude-schema
   (ma/schema [:and
@@ -30,7 +30,7 @@
    [:cross-section {:optional true} :cross-section]])
 
 (def any-map-schema
-  (ma/schema [:map]))
+  [:map])
 
 (def forward-schema
   [:and
