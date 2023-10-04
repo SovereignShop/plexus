@@ -1,13 +1,20 @@
 (ns plexus.schema
   (:require
-   [plexus.impl :as impl]
+   [clj-manifold3d.core :as m]
    [malli.core :as ma]
-   [clj-manifold3d.core :as m]))
+   [plexus.impl :as impl]))
 
 (def curve-schema
   [:map
    [:angle {:optional true} number?]
    [:curve-radius {:optional true} number?]])
+
+(def curve-generic-schema
+  [:map
+   [:angle {:optional true} number?]
+   [:curve-radius {:optional true} number?]
+   [:direction {:optional true} [:enum :left :right :up :down]]
+   [:roll {:optional true} number?]])
 
 (def linear-extrude-schema
   (ma/schema [:and
@@ -23,6 +30,12 @@
 (def model-schema
   [:map
    [:profile {:optional true} [:sequential any?]]])
+
+(def insert-schema
+  [:map
+   [:extrusion :extrusion]
+   [:models {:optional true} [:sequential keyword?]]
+   [:end-frame {:optional true} keyword?]])
 
 (def frame-schema
   [:map

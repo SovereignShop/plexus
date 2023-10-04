@@ -7,7 +7,13 @@
    [plexus.triangles :as triangles]
    [plexus.transforms :as tf]))
 
-(defrecord Extrusion [result-forms frames state angle-scalar forms transforms models])
+(defrecord Extrusion [result-forms frames state angle-scalar forms transforms models main-model]
+  Object
+  (toString [_]
+    (str "Extrusion, main model: " main-model)))
+
+(defmethod clojure.core/print-method Extrusion [x writer]
+  (.write writer (str "Extrusion:" (:main-model x))))
 
 (defrecord Frame [frame-transform segment-transform segments])
 
@@ -24,7 +30,7 @@
 (defn extrusion?
   "True if `x` is an extrusion."
   [x]
-  (instance? plexus.impl.Extrusion x))
+  (instance? Extrusion x))
 
 (defn to-model [frame]
   (let [manifolds (remove nil? (map :manifold (:segments frame)))
@@ -64,6 +70,29 @@
         (assoc (second form) :op (first form) ::list (nnext form)))
       {:op (first form) ::list (next form)})))
 
+(def registry
+  (merge
+   (ma/class-schemas)
+   (ma/comparator-schemas)
+   (ma/base-schemas)
+   (ma/predicate-schemas)
+   {:neg-int (ma/-simple-schema {:type :neg-int, :pred neg-int?})
+    :pos-int (ma/-simple-schema {:type :pos-int, :pred pos-int?})
+    :extrusion (ma/-simple-schema {:type :extrusion :pred extrusion?})
+    :manifold (ma/-simple-schema {:type :manifold :pred m/manifold?})
+    :cross-section (ma/-simple-schema {:type :cross-section :pred m/cross-section?})
+    :transform (ma/-simple-schema {:type :transform :pred tf/transform?})}))
+
+(def get-schema-validator
+  (memoize
+   (fn [schema]
+     (ma/validator schema {:registry registry}))))
+
+(defn check-schema [x schema form]
+  (let [validator (get-schema-validator schema)]
+    (if (validator x) x (throw (ex-info "Schema validation failure"
+                                        (update (ma/explain schema x {:registry registry}) :value str))))))
+
 (defn parse-args
   ([form]
    (parse-args form nil))
@@ -78,20 +107,20 @@
                args (nnext form)
                ret (cond-> (assoc (second form) :op op)
                      args (assoc ::list args))]
-           (ma/coerce schema ret nil {:registry u/registry}))
+           (check-schema ret schema form))
          (loop [[arg & args] (next form)
                 kvs (transient {:op (first form)})]
            (if (nil? arg)
              (let [ret (persistent! kvs)]
                (if schema
-                 (ma/coerce schema ret nil {:registry u/registry})
+                 (check-schema ret schema form)
                  ret))
              (if (keyword? arg)
                (recur (next args)
                       (assoc! kvs arg (first args)))
                (let [ret (persistent! (assoc! kvs ::list (vec (cons arg args))))]
                  (if schema
-                   (ma/coerce schema ret nil {:registry u/registry})
+                   (check-schema ret schema form)
                    ret))))))))))
 
 (defn parse-path [path-spec]
@@ -203,41 +232,40 @@
                    apply-to (or to current-frame-ids)]
                (recur state
                       forms
-                      (try
-                        (reduce
-                         (fn [frames frame-id]
-                           (let [frame (get frames frame-id)]
-                             (assoc frames
-                                    frame-id
-                                    (let [start-transform (cond-> (:segment-transform frame)
-                                                            center (m/translate [0 0 (- (/ length 2))])
-                                                            (= axis :x) (tf/rotate :x (/ Math/PI 2))
-                                                            (= axis :y) (tf/rotate :y (- (/ Math/PI 2))))
-                                          end-transform (cond-> (:segment-transform frame)
-                                                          true (tf/go-forward (cond-> length center (/ 2)) axis))
-                                          step-length (if n-steps (/ length n-steps) length)
-                                          all-transforms (conj (vec (for [step (range (quot length step-length))]
-                                                                      (-> (tf/go-forward start-transform (* step step-length) axis)
-                                                                          (transform-step-fn step))))
-                                                               end-transform)
-                                          frame (vary-meta frame merge props)
-                                          is-gap (or (true? gap)
-                                                     (and (sequential? gap) (contains? (set gap) frame-id)))
-                                          cross-section (and (not is-gap) (:cross-section frame))
-                                          extrusion (or model (when cross-section
-                                                                (m/extrude cross-section length)))]
-                                      (-> frame
-                                          (assoc :segment-transform end-transform)
-                                          (update :segments
-                                                  conj
-                                                  (with-meta
-                                                    (Segment. start-transform end-transform all-transforms cross-section
-                                                              (when extrusion
-                                                                (m/transform extrusion start-transform))
-                                                              true)
-                                                    (meta frame))))))))
-                         frames
-                         apply-to))
+                      (reduce
+                       (fn [frames frame-id]
+                         (let [frame (get frames frame-id)]
+                           (assoc frames
+                                  frame-id
+                                  (let [start-transform (cond-> (:segment-transform frame)
+                                                          center (m/translate [0 0 (- (/ length 2))])
+                                                          (= axis :x) (tf/rotate :x (/ Math/PI 2))
+                                                          (= axis :y) (tf/rotate :y (- (/ Math/PI 2))))
+                                        end-transform (cond-> (:segment-transform frame)
+                                                        true (tf/go-forward (cond-> length center (/ 2)) axis))
+                                        step-length (if n-steps (/ length n-steps) length)
+                                        all-transforms (conj (vec (for [step (range (quot length step-length))]
+                                                                    (-> (tf/go-forward start-transform (* step step-length) axis)
+                                                                        (transform-step-fn step))))
+                                                             end-transform)
+                                        frame (vary-meta frame merge props)
+                                        is-gap (or (true? gap)
+                                                   (and (sequential? gap) (contains? (set gap) frame-id)))
+                                        cross-section (and (not is-gap) (:cross-section frame))
+                                        extrusion (or model (when cross-section
+                                                              (m/extrude cross-section length)))]
+                                    (-> frame
+                                        (assoc :segment-transform end-transform)
+                                        (update :segments
+                                                conj
+                                                (with-meta
+                                                  (Segment. start-transform end-transform all-transforms cross-section
+                                                            (when extrusion
+                                                              (m/transform extrusion start-transform))
+                                                            true)
+                                                  (meta frame))))))))
+                       frames
+                       apply-to)
                       result-forms))
 
              :plexus.impl/set
@@ -410,7 +438,7 @@
                                                                        (DoubleVec3. (or x 0) (or y 0) (or z 0))))
                                     (update frame :segment-transform m/translate [(or x 0) (or y 0) (or z 0)])))))
                        frames
-                       apply-to)
+                       (conj apply-to (:default-frame state)))
                       result-forms))
 
 
@@ -428,7 +456,7 @@
                                                                              (* 1 (or y 0))
                                                                              (* 1 (or z 0))]))))
                        frames
-                       apply-to)
+                       (conj apply-to (:default-frame state)))
                       result-forms))
 
              :plexus.impl/segment
@@ -469,10 +497,14 @@
 
              :plexus.impl/branch
              (let [{:keys [from with]} form
+                   _ (when-not (get frames from)
+                       (throw (ex-info (format "`:from` frame `%s` does not exist in frame set: `%s`" from
+                                               (vec (keys (dissoc frames ::default-frame))))
+                                       {})))
                    with-frames (or with current-frame-ids)
                    branch-ret (extrude* (assoc state
                                                :default-frame from
-                                               :current-frame-ids with-frames)
+                                               :current-frame-ids (into #{} with-frames))
                                         (normalize-segment (:plexus.impl/list form))
                                         frames
                                         #_(select-keys frames (conj with-frames from)))]
@@ -547,7 +579,7 @@
                                           (m/invert-frame (:frame-transform frame))
                                           replace)))))
                        frames
-                       apply-to)
+                       (conj apply-to (:default-frame state)))
                       result-forms))
 
              :plexus.impl/insert
@@ -559,6 +591,9 @@
                                          (:frame-transform base-frame)
                                          (:segment-transform base-frame))
                    extrusion-models (:models extrusion)
+                   _ (let [missing-models (remove #(contains? extrusion-models %) models)]
+                       (when (seq missing-models)
+                         (throw (ex-info (str "Insertion models not defined in extrusion: " (vec missing-models)) {}))))
                    insert-end-frame (if end-frame
                                       (-> extrusion :frames end-frame)
                                       base-frame)
@@ -591,7 +626,7 @@
                                             end-transform
                                             (:segment-transform frame))))))
                          frames
-                         current-frame-ids)
+                         (conj current-frame-ids default-frame-id))
                         frames)
                       result-forms))
 
@@ -614,13 +649,13 @@
 (defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
         frames (:frames result)
-        _ (when (empty? frames)
-            (throw (Exception.  "No frames included in extrusion.")))
         angle-scalar (:angle-scalar result)
         result-forms (:result-forms result)
         unioned-frames (merge frames (:models result))
+        _ (when (empty? unioned-frames)
+            (throw (Exception.  "No frames included in extrusion.")))
         main-model-name (or (:name (first result-forms))
-                            (key (first frames)))
+                            (key (first unioned-frames)))
         model-cache (atom {})
         to-manifold-cached (fn [x]
                              (or (get @model-cache x)

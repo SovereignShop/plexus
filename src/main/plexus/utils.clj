@@ -12,17 +12,6 @@
 
 (defn half [x] (/ x 2))
 
-(def registry
-  (merge
-   (ma/class-schemas)
-   (ma/comparator-schemas)
-   (ma/base-schemas)
-   (ma/predicate-schemas)
-   {:neg-int (ma/-simple-schema {:type :neg-int, :pred neg-int?})
-    :pos-int (ma/-simple-schema {:type :pos-int, :pred pos-int?})
-    :cross-section (ma/-simple-schema {:type :cross-section :pred cross-section?})
-    :transform (ma/-simple-schema {:type :transform :pred tf/transform?})}))
-
 (defn bAc->a
   "side,angle,side -> side via. law of cosines."
   [b A c]

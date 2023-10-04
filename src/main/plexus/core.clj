@@ -53,8 +53,8 @@
             ~m#)))))
 
 (defop left
-  "Extrude an ego-centric left curve. Rotate-extrudes about a y-axis offset
-  along the ego-centric x axis by negative `:curve-radians`.
+  "Extrude a left curve. Rotate-extrudes about a y-axis offset
+  along the x axis by negative `:curve-radians`.
 
   opts
   `:angle` - number of radians to cufve.
@@ -62,8 +62,8 @@
   schema/curve-schema)
 
 (defop right
-  "Extrude an ego-centric right curve. Rotate-extrudes about a y-axis offset
-  along the ego-centric x axis by `:curve-radians`.
+  "Extrude an right curve. Rotate-extrudes about a y-axis offset
+  along the x axis by `:curve-radians`.
 
   opts
   `:angle` - number of radians to cufve.
@@ -71,8 +71,8 @@
   schema/curve-schema)
 
 (defop up
-  "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
-  along the ego-centric y axis by negative `:curve-radians`.
+  "Extrude a up curve. Rotate-extrudes about a x-axis offset
+  along the y axis by negative `:curve-radians`.
 
   opts
   `:angle` - number of radians to cufve.
@@ -80,13 +80,23 @@
   schema/curve-schema)
 
 (defop down
-  "Extrude an ego-centric right curve. Rotate-extrudes about a x-axis offset
-  along the ego-centric x axis by `:curve-radians`.
+  "Extrude a right curve. Rotate-extrudes about a x-axis offset
+  along the x axis by `:curve-radians`.
 
   opts
-  `:angle` - number of radians to cufve.
+  `:angle` - number of radians to curve.
   `:curve-radius` - radius of the curve."
   schema/curve-schema)
+
+(defop curve
+  "Extrude a curve segment.
+
+  opts
+  `:angle` number of radians to curve.
+  `:curve-radius` radius of the curve.
+  `:direction` :left, :right, :up, or :down direction. Default is :left.
+  `:roll` number of radians to roll aboute Z before extruding."
+  schema/curve-generic-schema)
 
 (defop forward
   "Extrude the model set forward.
@@ -244,7 +254,7 @@
   `:models` (optional) - models to inserts. Can include results and/or frames. Defaults to singleton vector of last result model.
   `:ns` (optional) - an optional namespace ot associate with inserted models.
   `:end-frame` (optional) - name of a inserted the next segment is relative to. The frame must be defined in the provided extrusion."
-  schema/any-map-schema)
+  schema/insert-schema)
 
 
 #_(defn show-coordinate-frame [& args]
