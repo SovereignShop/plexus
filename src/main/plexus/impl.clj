@@ -637,14 +637,18 @@
            (let [form @current-form
                  {:keys [line column file]} (meta form)
                  op (:op form)
-                 exception-data {:message (format "Error while apply `%s` operation" (name op))
+                 error-string (format "Error while applying `%s` (line=%s, column=%s): %s" (name op)
+                                      line
+                                      column
+                                      (.getMessage e))
+                 exception-data {:message error-string
                                  :line line
                                  :column column
                                  :file file
                                  :key op
                                  :original-exception e}]
              (println "throwing ex info")
-             (throw (ex-info "Error Processing segment" exception-data)))))))))
+             (throw (ex-info error-string exception-data)))))))))
 
 (defn extrude [forms]
   (let [result (extrude* (normalize-segment forms))
