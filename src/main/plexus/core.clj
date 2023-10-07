@@ -124,7 +124,7 @@
 
 (defop hull
   "Makes a convex hull out of wrapped segments. Optional `:to` parameter specifies which
-  frames to loft."
+  frames to hull."
   schema/any-map-schema)
 
 (defop translate
