@@ -10,9 +10,13 @@
 
 (defn- pretty-demunge
   [fn-object]
-  (let [dem-fn (clojure.repl/demunge (str fn-object))
-        pretty (second (re-find #"(.*?\/.*?)[\-\-|@].*" dem-fn))]
-    (if pretty (peek (clojure.string/split pretty #"/")) dem-fn)))
+  (cond (vector? fn-object)
+        (into [(first fn-object)] (map pretty-demunge (subvec fn-object 1)))
+        :else
+        (let [dem-fn (clojure.repl/demunge (str fn-object))
+              pretty (second (re-find #"(.*?\/.*?)[|@].*" dem-fn))]
+          (symbol
+           (if pretty (peek (clojure.string/split pretty #"/")) dem-fn)))))
 
 (defn- get-map-key-schemas [schema]
   (if (vector? schema)
@@ -31,7 +35,7 @@
                 (let [[k t] (if (= (count s) 2)
                               s
                               [(nth s 0) (nth s 2)])]
-                  [k (symbol (pretty-demunge t))]))
+                  [k (str (pretty-demunge t))]))
               map-key-schemas)
       ['...])))
 
