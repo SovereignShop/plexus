@@ -248,7 +248,6 @@
                                                                     (-> (tf/go-forward start-transform (* step step-length) axis)
                                                                         (transform-step-fn step))))
                                                              end-transform)
-                                        frame (vary-meta frame merge props)
                                         is-gap (or (true? gap)
                                                    (and (sequential? gap) (contains? (set gap) frame-id)))
                                         cross-section (and (not is-gap) (:cross-section frame))
@@ -263,7 +262,7 @@
                                                             (when extrusion
                                                               (m/transform extrusion start-transform))
                                                             true)
-                                                  (meta frame))))))))
+                                                  (merge (meta frame) props))))))))
                        frames
                        apply-to)
                       result-forms))
@@ -389,7 +388,6 @@
                                                          angle
                                                          cs
                                                          transform-step-fn))
-                               frame (vary-meta frame merge props)
                                is-gap (or (true? gap)
                                           (and (sequential? gap) (contains? (set gap) frame-id)))
                                cross-section (and (not is-gap) (:cross-section frame))
@@ -417,7 +415,7 @@
                                               conj
                                               (with-meta
                                                 (Segment. start-transform end-transform all-tfs cross-section manifold true)
-                                                (meta frame)))))))
+                                                (merge (meta frame) props)))))))
                        frames
                        apply-to)
                       result-forms))
