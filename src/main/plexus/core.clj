@@ -10,9 +10,14 @@
 
 (defn- pretty-demunge
   [fn-object]
-  (let [dem-fn (clojure.repl/demunge (str fn-object))
-        pretty (second (re-find #"(.*?\/.*?)[\-\-|@].*" dem-fn))]
-    (if pretty (peek (clojure.string/split pretty #"/")) dem-fn)))
+  (cond (vector? fn-object)
+        (into [(first fn-object)] (map pretty-demunge (subvec fn-object 1)))
+        :else
+        (let [dem-fn (clojure.repl/demunge (str fn-object))
+              pretty (second (re-find #"(.*?\/.*?)(--\d+)?[@].*" dem-fn))]
+          (symbol
+           (if pretty (peek (clojure.string/split pretty #"/")) dem-fn)))))
+
 
 (defn- get-map-key-schemas [schema]
   (if (vector? schema)
@@ -31,7 +36,7 @@
                 (let [[k t] (if (= (count s) 2)
                               s
                               [(nth s 0) (nth s 2)])]
-                  [k (symbol (pretty-demunge t))]))
+                  [k #_(str) (pretty-demunge t)]))
               map-key-schemas)
       ['...])))
 
@@ -124,7 +129,7 @@
 
 (defop hull
   "Makes a convex hull out of wrapped segments. Optional `:to` parameter specifies which
-  frames to loft."
+  frames to hull."
   schema/any-map-schema)
 
 (defop translate
@@ -165,6 +170,8 @@
   `:with` (optional) Specifies what subset of current frames to include in the
           branch context."
   schema/branch-schema)
+
+(str clojure.core/string?)
 
 (defn to
   "Body is applied only to frames specified in the required `:models [:frame ...]` paramter"

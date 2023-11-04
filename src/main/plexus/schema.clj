@@ -36,6 +36,7 @@
   [:map
    [:extrusion :extrusion]
    [:models {:optional true} [:sequential keyword?]]
+   [:ns {:optional true} simple-keyword?]
    [:end-frame {:optional true} keyword?]])
 
 (def frame-schema
