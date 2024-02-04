@@ -1,6 +1,8 @@
 (ns plexus.impl
-  (:import [manifold3d.glm MatrixTransforms DoubleVec3])
+  (:import [manifold3d.glm MatrixTransforms DoubleVec3]
+           [manifold3d Manifold ManifoldVector])
   (:require
+   [clj-manifold3d.impl :as impl]
    [plexus.utils :as u]
    [malli.core :as ma]
    [clj-manifold3d.core :as m]
@@ -10,7 +12,30 @@
 (defrecord Extrusion [result-forms frames state angle-scalar forms transforms models main-model]
   Object
   (toString [_]
-    (str "Extrusion, main model: " main-model)))
+    (str "Extrusion, main model: " main-model))
+
+  impl/ICSG
+  (batch-boolean [this xs op]
+    (Manifold/BatchBoolean
+     (let [v (ManifoldVector.)]
+       (doseq [x (cons (get models main-model)
+                       (map (fn [x] (if (instance? Extrusion x) (get (:models x) (:main-model x)) x))
+                            xs))]
+         (.pushBack v x))
+       v)
+     op))
+  (union [this o]
+    (if (instance? Extrusion o)
+      (.add (get models main-model) (get (:models o) (:main-model o)))
+      (.add (get models main-model) o)))
+  (difference [this o]
+    (if (instance? Extrusion o)
+      (.subtract (get models main-model) (:main-model o))
+      (.subtract main-model o)))
+  (intersection [this o]
+    (if (instance? Extrusion o)
+      (.intersect (get models main-model) (get (:models o) (:main-model o)))
+      (.intersect (get models main-model) o))))
 
 (defmethod clojure.core/print-method Extrusion [x writer]
   (.write writer (str "Extrusion:" (:main-model x))))
