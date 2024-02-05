@@ -14,28 +14,8 @@
   (toString [_]
     (str "Extrusion, main model: " main-model))
 
-  impl/ICSG
-  (batch-boolean [this xs op]
-    (Manifold/BatchBoolean
-     (let [v (ManifoldVector.)]
-       (doseq [x (cons (get models main-model)
-                       (map (fn [x] (if (instance? Extrusion x) (get (:models x) (:main-model x)) x))
-                            xs))]
-         (.pushBack v x))
-       v)
-     op))
-  (union [this o]
-    (if (instance? Extrusion o)
-      (.add (get models main-model) (get (:models o) (:main-model o)))
-      (.add (get models main-model) o)))
-  (difference [this o]
-    (if (instance? Extrusion o)
-      (.subtract (get models main-model) (:main-model o))
-      (.subtract main-model o)))
-  (intersection [this o]
-    (if (instance? Extrusion o)
-      (.intersect (get models main-model) (get (:models o) (:main-model o)))
-      (.intersect (get models main-model) o))))
+  impl/ICSGConvertable
+  (to-csg [this] (get models main-model)))
 
 (defmethod clojure.core/print-method Extrusion [x writer]
   (.write writer (str "Extrusion:" (:main-model x))))
@@ -670,7 +650,6 @@
                                  :file file
                                  :key op
                                  :original-exception e}]
-             (println "throwing ex info")
              (throw (ex-info error-string exception-data)))))))))
 
 (defn extrude [forms]
